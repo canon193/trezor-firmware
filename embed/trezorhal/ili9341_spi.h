@@ -1,5 +1,5 @@
 /*
- * This file is part of the TREZOR project, https://trezor.io/
+ * This file is part of the Trezor project, https://trezor.io/
  *
  * Copyright (c) SatoshiLabs
  *
@@ -17,29 +17,20 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include STM32_HAL_H
-#include "touch.h"
+#ifndef __ILI9341_SPI_H__
+#define __ILI9341_SPI_H__
 
-#if TREZOR_MODEL == T
-// STM32F429I-DISC1 (D001) uses STMPE811 touch controller
-#include "touch_d001.h"
-#elif TREZOR_MODEL == 1
-#include "touch_1.h"
-#else
-#error Unknown TREZOR Model
-#endif
+#include <stdint.h>
 
-uint32_t touch_click(void)
-{
-    uint32_t r = 0;
-    // flush touch events if any
-    while (touch_read()) { }
-    // wait for TOUCH_START
-    while ((touch_read() & TOUCH_START) == 0) { }
-    // wait for TOUCH_END
-    while (((r = touch_read()) & TOUCH_END) == 0) { }
-    // flush touch events if any
-    while (touch_read()) { }
-    // return last touch coordinate
-    return r;
-}
+// ILI9341 LTDC timing constants for 240x320 display
+#define ILI9341_HSYNC ((uint32_t)9)   // Horizontal synchronization
+#define ILI9341_HBP   ((uint32_t)29)  // Horizontal back porch
+#define ILI9341_HFP   ((uint32_t)2)   // Horizontal front porch
+#define ILI9341_VSYNC ((uint32_t)1)   // Vertical synchronization
+#define ILI9341_VBP   ((uint32_t)3)   // Vertical back porch
+#define ILI9341_VFP   ((uint32_t)2)   // Vertical front porch
+
+// Initialize ILI9341 display controller via SPI
+void ili9341_init(void);
+
+#endif // __ILI9341_SPI_H__

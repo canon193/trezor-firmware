@@ -1,5 +1,5 @@
 /*
- * This file is part of the TREZOR project, https://trezor.io/
+ * This file is part of the Trezor project, https://trezor.io/
  *
  * Copyright (c) SatoshiLabs
  *
@@ -17,29 +17,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include STM32_HAL_H
-#include "touch.h"
+#ifndef __DISPLAY_LTDC_H__
+#define __DISPLAY_LTDC_H__
 
-#if TREZOR_MODEL == T
-// STM32F429I-DISC1 (D001) uses STMPE811 touch controller
-#include "touch_d001.h"
-#elif TREZOR_MODEL == 1
-#include "touch_1.h"
-#else
-#error Unknown TREZOR Model
-#endif
+#include <stdint.h>
 
-uint32_t touch_click(void)
-{
-    uint32_t r = 0;
-    // flush touch events if any
-    while (touch_read()) { }
-    // wait for TOUCH_START
-    while ((touch_read() & TOUCH_START) == 0) { }
-    // wait for TOUCH_END
-    while (((r = touch_read()) & TOUCH_END) == 0) { }
-    // flush touch events if any
-    while (touch_read()) { }
-    // return last touch coordinate
-    return r;
-}
+// Initialize LTDC display controller and ILI9341
+void display_ltdc_init(void);
+
+// Get pointer to framebuffer in SDRAM
+uint16_t *display_get_framebuffer(void);
+
+#endif // __DISPLAY_LTDC_H__

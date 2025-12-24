@@ -24,12 +24,11 @@
 const uint8_t AHBPrescTable[16] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 6, 7, 8, 9};
 const uint8_t APBPrescTable[8] = {0, 0, 0, 0, 1, 2, 3, 4};
 
-#ifdef STM32F427xx
-#define CORE_CLOCK_MHZ 168U
-#elif STM32F405xx
-#define CORE_CLOCK_MHZ 120U
+// STM32F429DISC1 configuration
+#ifdef STM32F429xx
+#define CORE_CLOCK_MHZ 180U
 #else
-#error Unsupported MCU
+#error This build targets STM32F429xx only
 #endif
 
 uint32_t SystemCoreClock = CORE_CLOCK_MHZ * 1000000U;
@@ -42,12 +41,14 @@ void SystemInit(void)
     FLASH->ACR = FLASH_ACR_LATENCY_5WS;
     // wait until the new wait state config takes effect -- per section 3.5.1 guidance
     while ((FLASH->ACR & FLASH_ACR_LATENCY) != FLASH_ACR_LATENCY_5WS);
-    // configure main PLL; assumes HSE is 8 MHz; this should evaluate to 0x27402a04 -- reference RM0090 section 7.3.2
+    // configure main PLL; assumes HSE is 8 MHz -- reference RM0090 section 7.3.2
+    // For 180 MHz: VCO = 8 MHz / 4 * 180 = 360 MHz, SYSCLK = 360 / 2 = 180 MHz, USB = 360 / 8 = 45 MHz
+    // Note: PLLSAI for LTDC pixel clock is configured separately by the display driver
     RCC->PLLCFGR = (RCC_PLLCFGR_RST_VALUE & ~RCC_PLLCFGR_PLLQ & ~RCC_PLLCFGR_PLLSRC & ~RCC_PLLCFGR_PLLP & ~RCC_PLLCFGR_PLLN & ~RCC_PLLCFGR_PLLM)
-                   | (7U << RCC_PLLCFGR_PLLQ_Pos)               // Q = 7
+                   | (8U << RCC_PLLCFGR_PLLQ_Pos)               // Q = 8 (USB = 45 MHz, within tolerance)
                    | RCC_PLLCFGR_PLLSRC_HSE                     // PLLSRC = HSE
                    | (0U << RCC_PLLCFGR_PLLP_Pos)               // P = 2 (two bits, 00 means PLLP = 2)
-                   | (CORE_CLOCK_MHZ << RCC_PLLCFGR_PLLN_Pos)   // N = CORE_CLOCK_MHZ
+                   | (CORE_CLOCK_MHZ << RCC_PLLCFGR_PLLN_Pos)   // N = CORE_CLOCK_MHZ = 180
                    | (4U << RCC_PLLCFGR_PLLM_Pos);              // M = 4
     // enable spread spectrum clock for main PLL
     RCC->SSCGR = RCC_SSCGR_SSCGEN | (44 << RCC_SSCGR_INCSTEP_Pos) | (250 << RCC_SSCGR_MODPER_Pos);

@@ -1,5 +1,5 @@
 /*
- * This file is part of the TREZOR project, https://trezor.io/
+ * This file is part of the Trezor project, https://trezor.io/
  *
  * Copyright (c) SatoshiLabs
  *
@@ -17,29 +17,26 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include STM32_HAL_H
-#include "touch.h"
+#ifndef __STMPE811_H__
+#define __STMPE811_H__
 
-#if TREZOR_MODEL == T
-// STM32F429I-DISC1 (D001) uses STMPE811 touch controller
-#include "touch_d001.h"
-#elif TREZOR_MODEL == 1
-#include "touch_1.h"
-#else
-#error Unknown TREZOR Model
-#endif
+#include <stdint.h>
+#include <stdbool.h>
 
-uint32_t touch_click(void)
-{
-    uint32_t r = 0;
-    // flush touch events if any
-    while (touch_read()) { }
-    // wait for TOUCH_START
-    while ((touch_read() & TOUCH_START) == 0) { }
-    // wait for TOUCH_END
-    while (((r = touch_read()) & TOUCH_END) == 0) { }
-    // flush touch events if any
-    while (touch_read()) { }
-    // return last touch coordinate
-    return r;
-}
+// Touch state structure
+typedef struct {
+    bool TouchDetected;
+    uint16_t X;
+    uint16_t Y;
+} stmpe811_state_t;
+
+// Initialize STMPE811 touch controller
+void stmpe811_init(void);
+
+// Check if touch is active
+bool stmpe811_is_touched(void);
+
+// Get touch state (position and detection status)
+void stmpe811_get_state(stmpe811_state_t *state);
+
+#endif // __STMPE811_H__

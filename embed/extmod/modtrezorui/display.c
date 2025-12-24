@@ -53,7 +53,8 @@ static struct {
 #include "display-unix.h"
 #else
 #if TREZOR_MODEL == T
-#include "display-stm32_t.h"
+// STM32F429I-DISC1 (D001) uses LTDC-based display driver
+#include "display-stm32_d001.h"
 #elif TREZOR_MODEL == 1
 #include "display-stm32_1.h"
 #endif

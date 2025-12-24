@@ -225,6 +225,9 @@ static void check_bootloader_version(void)
 
 int main(void)
 {
+    // Initialize display first (required for LTDC + SDRAM framebuffer)
+    display_init();
+
     touch_init();
     touch_power_on();
 

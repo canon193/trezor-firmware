@@ -1,5 +1,5 @@
 /*
- * This file is part of the TREZOR project, https://trezor.io/
+ * This file is part of the Trezor project, https://trezor.io/
  *
  * Copyright (c) SatoshiLabs
  *
@@ -17,29 +17,22 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include STM32_HAL_H
-#include "touch.h"
+#ifndef __SDRAM_H__
+#define __SDRAM_H__
 
-#if TREZOR_MODEL == T
-// STM32F429I-DISC1 (D001) uses STMPE811 touch controller
-#include "touch_d001.h"
-#elif TREZOR_MODEL == 1
-#include "touch_1.h"
-#else
-#error Unknown TREZOR Model
-#endif
+#include <stdint.h>
 
-uint32_t touch_click(void)
-{
-    uint32_t r = 0;
-    // flush touch events if any
-    while (touch_read()) { }
-    // wait for TOUCH_START
-    while ((touch_read() & TOUCH_START) == 0) { }
-    // wait for TOUCH_END
-    while (((r = touch_read()) & TOUCH_END) == 0) { }
-    // flush touch events if any
-    while (touch_read()) { }
-    // return last touch coordinate
-    return r;
-}
+// SDRAM device address (FMC SDRAM Bank 2)
+#define SDRAM_DEVICE_ADDR 0xD0000000
+
+// SDRAM size in bytes (8 MB for IS42S16400J)
+#define SDRAM_DEVICE_SIZE 0x00800000
+
+// SDRAM status
+#define SDRAM_OK    ((uint8_t)0x00)
+#define SDRAM_ERROR ((uint8_t)0x01)
+
+// Initialize SDRAM peripheral
+void sdram_init(void);
+
+#endif // __SDRAM_H__

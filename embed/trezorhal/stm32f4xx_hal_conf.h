@@ -46,13 +46,13 @@
 /* Exported types ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
 
-#ifdef STM32F427xx
+// STM32F429xx for STM32F429I-DISC1 board
+#ifdef STM32F429xx
 #define USE_USB_HS
 #define USE_USB_HS_IN_FS
-#elif STM32F405xx
-#define USE_USB_FS
+#define HAL_LTDC_MODULE_ENABLED
 #else
-#error Unsupported MCU
+#error Unsupported MCU - This build targets STM32F429xx only
 #endif
 
 /* ########################## Module Selection ############################## */
@@ -67,14 +67,14 @@
 /* #define HAL_DAC_MODULE_ENABLED */
 /* #define HAL_DCMI_MODULE_ENABLED */
 #define HAL_DMA_MODULE_ENABLED
-/* #define HAL_DMA2D_MODULE_ENABLED */
+#define HAL_DMA2D_MODULE_ENABLED
 /* #define HAL_ETH_MODULE_ENABLED */
 #define HAL_FLASH_MODULE_ENABLED
 /* #define HAL_NAND_MODULE_ENABLED */
 /* #define HAL_NOR_MODULE_ENABLED */
 /* #define HAL_PCCARD_MODULE_ENABLED */
 #define HAL_SRAM_MODULE_ENABLED
-/* #define HAL_SDRAM_MODULE_ENABLED */
+#define HAL_SDRAM_MODULE_ENABLED
 /* #define HAL_HASH_MODULE_ENABLED */
 #define HAL_GPIO_MODULE_ENABLED
 #define HAL_I2C_MODULE_ENABLED
