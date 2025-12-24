@@ -140,10 +140,16 @@ void delay_random(void)
 
 void clear_otg_hs_memory(void)
 {
+#if defined(STM32F429xx)
+    // STM32F429I-DISC1 uses OTG FS only, OTG HS requires external ULPI PHY
+    // Skip OTG HS memory clear to avoid access issues
+    (void)0;
+#else
     // use the HAL version due to section 2.1.6 of STM32F42xx Errata sheet
     __HAL_RCC_USB_OTG_HS_CLK_ENABLE(); // enable USB_OTG_HS peripheral clock so that the peripheral memory is accessible
     memset_reg((volatile void *) USB_OTG_HS_DATA_FIFO_RAM, (volatile void *) (USB_OTG_HS_DATA_FIFO_RAM + USB_OTG_HS_DATA_FIFO_SIZE), 0);
     __HAL_RCC_USB_OTG_HS_CLK_DISABLE(); // disable USB OTG_HS peripheral clock as the peripheral is not needed right now
+#endif
 }
 
 uint32_t __stack_chk_guard = 0;
