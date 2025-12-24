@@ -49,6 +49,11 @@ SECTIONS {
     . = ALIGN(4);
   } >CCMRAM
 
+  /* Discard exception handling index - not used in bare-metal */
+  /DISCARD/ : {
+    *(.ARM.exidx*)
+  }
+
   .stack : ALIGN(8) {
     . = 4K; /* this acts as a build time assertion that at least this much memory is available for stack use */
   } >CCMRAM

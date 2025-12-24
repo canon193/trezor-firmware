@@ -66,12 +66,12 @@ void mpu_config_bootloader(void)
     MPU->RBAR = PERIPH_BASE;
     MPU->RASR = MPU_RASR_ENABLE_Msk | MPU_RASR_ATTR_PERIPH | LL_MPU_REGION_SIZE_1GB | LL_MPU_REGION_FULL_ACCESS | MPU_RASR_XN_Msk;
 
-#ifdef STM32F427xx
+#if defined(STM32F427xx) || defined(STM32F429xx)
     // CCMRAM (0x10000000 - 0x1000FFFF, read-write, execute never)
     MPU->RNR = MPU_REGION_NUMBER5;
     MPU->RBAR = CCMDATARAM_BASE;
     MPU->RASR = MPU_RASR_ENABLE_Msk | MPU_RASR_ATTR_SRAM | LL_MPU_REGION_SIZE_64KB | LL_MPU_REGION_FULL_ACCESS | MPU_RASR_XN_Msk;
-#elif STM32F405xx
+#elif defined(STM32F405xx)
     // no CCMRAM
 #else
 #error Unsupported MCU
@@ -130,12 +130,12 @@ void mpu_config_firmware(void)
     MPU->RBAR = PERIPH_BASE;
     MPU->RASR = MPU_RASR_ENABLE_Msk | MPU_RASR_ATTR_PERIPH | LL_MPU_REGION_SIZE_1GB | LL_MPU_REGION_FULL_ACCESS | MPU_RASR_XN_Msk;
 
-#ifdef STM32F427xx
+#if defined(STM32F427xx) || defined(STM32F429xx)
     // CCMRAM (0x10000000 - 0x1000FFFF, read-write, execute never)
     MPU->RNR = MPU_REGION_NUMBER7;
     MPU->RBAR = CCMDATARAM_BASE;
     MPU->RASR = MPU_RASR_ENABLE_Msk | MPU_RASR_ATTR_SRAM | LL_MPU_REGION_SIZE_64KB | LL_MPU_REGION_FULL_ACCESS | MPU_RASR_XN_Msk;
-#elif STM32F405xx
+#elif defined(STM32F405xx)
     // no CCMRAM
 #else
 #error Unsupported MCU

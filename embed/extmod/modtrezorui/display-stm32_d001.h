@@ -149,7 +149,7 @@ static void __attribute__((unused)) display_sleep(void) {
     display_set_backlight(0);
 }
 
-static void display_unsleep(void) {
+static void __attribute__((unused)) display_unsleep(void) {
     // Wake display - ILI9341 should already be awake from init
     // Just restore backlight
 }
