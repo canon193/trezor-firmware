@@ -8,7 +8,7 @@ CPPDEFINES_MOD = []
 SOURCE_MOD = []
 
 # modtrezorcrypto
-CCFLAGS_MOD += '-Wno-sequence-point '
+CCFLAGS_MOD += '-Wno-sequence-point -Wno-stringop-overread -Wno-array-parameter '
 CPPPATH_MOD += [
     'vendor/trezor-crypto',
 ]

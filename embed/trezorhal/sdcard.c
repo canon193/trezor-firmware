@@ -170,7 +170,14 @@ void sdcard_power_off(void) {
 }
 
 secbool sdcard_is_present(void) {
+#if defined(STM32F429xx)
+    // STM32F429I-DISC1: PC13 is USER button, not SD card detect
+    // The DISC1 board's microSD slot has no card detect pin connected
+    // Return false to skip SD card operations
+    return secfalse;
+#else
     return sectrue * (GPIO_PIN_RESET == HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13));
+#endif
 }
 
 uint64_t sdcard_get_capacity_in_bytes(void) {

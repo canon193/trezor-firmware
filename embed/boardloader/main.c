@@ -183,6 +183,7 @@ int main(void)
         return copy_sdcard() == sectrue ? 0 : 3;
     }
 
+#if PRODUCTION
     image_header hdr;
 
     ensure(
@@ -197,6 +198,19 @@ int main(void)
         "invalid bootloader hash");
 
     jump_to(BOOTLOADER_START + IMAGE_HEADER_SIZE);
+#else
+    // Development mode: skip signature verification, just check magic and jump
+    const uint32_t *magic = (const uint32_t *)BOOTLOADER_START;
+    if (magic[0] == BOOTLOADER_IMAGE_MAGIC) {
+        jump_to(BOOTLOADER_START + IMAGE_HEADER_SIZE);
+    } else {
+        // No valid bootloader header, show error
+        display_backlight(255);
+        display_printf("No bootloader found (dev mode)\n");
+        display_printf("Flash bootloader.elf at 0x08020000\n");
+        for (;;);
+    }
+#endif
 
     return 0;
 }

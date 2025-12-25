@@ -188,6 +188,10 @@ secbool load_vendor_header_keys(const uint8_t * const data, vendor_header * cons
     return load_vendor_header(data, BOOTLOADER_KEY_M, BOOTLOADER_KEY_N, BOOTLOADER_KEYS, vhdr);
 }
 
+// protection against bootloader downgrade and vendor keys lock
+
+#if PRODUCTION
+
 static secbool check_vendor_keys_lock(const vendor_header * const vhdr) {
     uint8_t lock[FLASH_OTP_BLOCK_SIZE];
     ensure(flash_otp_read(FLASH_OTP_BLOCK_VENDOR_KEYS_LOCK, 0, lock, FLASH_OTP_BLOCK_SIZE), NULL);
@@ -198,10 +202,6 @@ static secbool check_vendor_keys_lock(const vendor_header * const vhdr) {
     vendor_keys_hash(vhdr, hash);
     return sectrue * (0 == memcmp(lock, hash, 32));
 }
-
-// protection against bootloader downgrade
-
-#if PRODUCTION
 
 static void check_bootloader_version(void)
 {
@@ -257,6 +257,7 @@ main_start:
 
     // detect whether the devices contains a valid firmware
 
+#if PRODUCTION
     firmware_present = load_vendor_header_keys((const uint8_t *)FIRMWARE_START, &vhdr);
     if (sectrue == firmware_present) {
         firmware_present = check_vendor_keys_lock(&vhdr);
@@ -267,6 +268,19 @@ main_start:
     if (sectrue == firmware_present) {
         firmware_present = check_image_contents(&hdr, IMAGE_HEADER_SIZE + vhdr.hdrlen, FIRMWARE_SECTORS, FIRMWARE_SECTORS_COUNT);
     }
+#else
+    // Development mode: skip signature verification, just check magic
+    firmware_present = secfalse;
+    const uint32_t *fwmagic = (const uint32_t *)FIRMWARE_START;
+    if (fwmagic[0] == 0x565A5254) {  // "TRZV" vendor header magic
+        memcpy(&vhdr.hdrlen, (const uint8_t *)FIRMWARE_START + 4, 4);
+        const uint32_t *imgmagic = (const uint32_t *)(FIRMWARE_START + vhdr.hdrlen);
+        if (imgmagic[0] == 0x465A5254) {  // "TRZF" firmware magic
+            memcpy(&hdr.hdrlen, (const uint8_t *)(FIRMWARE_START + vhdr.hdrlen) + 4, 4);
+            firmware_present = sectrue;
+        }
+    }
+#endif
 
     // start the bootloader if no or broken firmware found ...
     if (firmware_present != sectrue) {
@@ -339,6 +353,7 @@ main_start:
         }
     }
 
+#if PRODUCTION
     ensure(
         load_vendor_header_keys((const uint8_t *)FIRMWARE_START, &vhdr),
         "invalid vendor header");
@@ -381,6 +396,7 @@ main_start:
 
         ui_fadeout();
     }
+#endif
 
     // mpu_config_firmware();
     // jump_to_unprivileged(FIRMWARE_START + vhdr.hdrlen + IMAGE_HEADER_SIZE);
