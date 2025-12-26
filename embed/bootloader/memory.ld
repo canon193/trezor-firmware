@@ -23,14 +23,14 @@ ccmram_end = ORIGIN(CCMRAM) + LENGTH(CCMRAM);
 sram_start = ORIGIN(SRAM);
 sram_end = ORIGIN(SRAM) + LENGTH(SRAM);
 
-_codelen = SIZEOF(.flash) + SIZEOF(.data);
+_codelen = SIZEOF(.text) + SIZEOF(.data);
 
 SECTIONS {
   .header : ALIGN(4) {
     KEEP(*(.header));
   } >FLASH AT>FLASH
 
-  .flash : ALIGN(512) {
+  .text : ALIGN(512) {
     KEEP(*(.vector_table));
     . = ALIGN(4);
     *(.text*);

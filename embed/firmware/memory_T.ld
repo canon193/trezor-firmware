@@ -47,7 +47,7 @@ SECTIONS {
     . = ALIGN(512);
   } >FLASH2 AT>FLASH2
 
-  .flash : ALIGN(512) {
+  .text : ALIGN(512) {
     KEEP(*(.vector_table));
     . = ALIGN(4);
     *(.text*);
