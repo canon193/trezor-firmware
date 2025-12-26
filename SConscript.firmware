@@ -450,7 +450,7 @@ program_elf = env.Command(
 
 if env.get('TREZOR_MODEL') == 'T':
     action_bin=[
-        '$OBJCOPY -O binary -j .vendorheader -j .header -j .flash -j .data --pad-to 0x08100000 $SOURCE ${TARGET}.p1',
+        '$OBJCOPY -O binary -j .vendorheader -j .header -j .text -j .data --pad-to 0x08100000 $SOURCE ${TARGET}.p1',
         '$OBJCOPY -O binary -j .flash2 $SOURCE ${TARGET}.p2',
         '$CAT ${TARGET}.p1 ${TARGET}.p2 > $TARGET',
         '$BINCTL $TARGET -h',
@@ -459,7 +459,7 @@ if env.get('TREZOR_MODEL') == 'T':
     ]
 else:
     action_bin=[
-        '$OBJCOPY -O binary -j .flash -j .data $SOURCE $TARGET',
+        '$OBJCOPY -O binary -j .text -j .data $SOURCE $TARGET',
     ]
 
 program_bin = env.Command(

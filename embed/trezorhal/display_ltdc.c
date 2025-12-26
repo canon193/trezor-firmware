@@ -146,7 +146,7 @@ static void ltdc_layer_init(uint32_t fb_addr) {
     layer.ImageWidth = DISPLAY_RESX;
     layer.ImageHeight = DISPLAY_RESY;
 
-    HAL_LTDC_ConfigLayer(&ltdc_handle, &layer, 1);  // Layer 1
+    HAL_LTDC_ConfigLayer(&ltdc_handle, &layer, 0);  // Layer 1 (LTDC_LAYER_1 = 0)
 
     // Enable dithering for better color gradients
     HAL_LTDC_EnableDither(&ltdc_handle);
