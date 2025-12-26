@@ -52,7 +52,8 @@ int main(void)
     collect_hw_entropy();
 
 #if TREZOR_MODEL == T
-    check_and_replace_bootloader();
+    // Disabled for development - prevents custom bootloader from being overwritten
+    // check_and_replace_bootloader();
     // Enable MPU
     mpu_config_firmware();
 #endif
