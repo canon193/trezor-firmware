@@ -183,6 +183,15 @@ int main(void)
     clear_otg_hs_memory();
 
     display_init();
+
+    // DEBUG: Test direct framebuffer write - fill screen with red
+    display_backlight(255);
+    volatile uint16_t *test_fb = (volatile uint16_t *)0xD0000000;
+    for (int i = 0; i < 240 * 320; i++) {
+        test_fb[i] = 0xF800;  // Red in RGB565
+    }
+    hal_delay(3000);  // Wait 3 seconds to see red screen
+
     sdcard_init();
 
     if (check_sdcard()) {
