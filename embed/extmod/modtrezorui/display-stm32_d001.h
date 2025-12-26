@@ -29,8 +29,8 @@
 
 #define LED_PWM_TIM_PERIOD (10000)
 
-// Framebuffer in SDRAM
-static uint16_t *framebuffer = NULL;
+// Framebuffer in SDRAM (initialized directly to avoid runtime assignment issues)
+static uint16_t *framebuffer = (uint16_t *)0xD0000000;
 
 // Pixel window tracking for PIXELDATA macro
 static struct {
