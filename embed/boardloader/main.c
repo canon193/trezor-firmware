@@ -183,6 +183,25 @@ int main(void)
     clear_otg_hs_memory();
 
     display_init();
+    display_backlight(255);
+
+    // DEBUG: Check what display_printf writes
+    display_clear();  // Clear to black first
+    display_printf("TEST");
+
+    // Check if framebuffer has non-zero values (white pixels)
+    volatile uint16_t *fb = (volatile uint16_t *)0xD0000000;
+    int non_zero = 0;
+    for (int i = 0; i < 240 * 320; i++) {
+        if (fb[i] != 0) non_zero++;
+    }
+    // If non_zero > 0, pixels were written. Draw green if yes, blue if no.
+    uint16_t color = (non_zero > 0) ? 0x07E0 : 0x001F;  // Green or Blue
+    for (int i = 0; i < 1000; i++) {
+        fb[i] = color;
+    }
+    hal_delay(5000);
+
     sdcard_init();
 
     if (check_sdcard()) {
