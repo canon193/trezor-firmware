@@ -24,12 +24,19 @@
 #include "image.h"
 #include "flash.h"
 #include "rng.h"
+
+// SD card not supported on STM32F429I-DISC1 (pins conflict with LTDC)
+#if !defined(STM32F429xx)
 #include "sdcard.h"
+#endif
 
 #include "lowlevel.h"
 #include "version.h"
 
 #include "memzero.h"
+
+// SD card functions only available on non-DISC1 boards
+#if !defined(STM32F429xx)
 
 const uint8_t BOARDLOADER_KEY_M = 2;
 const uint8_t BOARDLOADER_KEY_N = 3;
@@ -157,6 +164,8 @@ static secbool copy_sdcard(void)
     return sectrue;
 }
 
+#endif  // !defined(STM32F429xx)
+
 int main(void)
 {
     if (sectrue != reset_flags_check()) {
@@ -183,19 +192,15 @@ int main(void)
     clear_otg_hs_memory();
 
     display_init();
-    display_backlight(255);
 
-    // DEBUG: Test multiple display_printf calls
-    display_printf("Line 1: AAAA\n");
-    display_printf("Line 2: BBBB\n");
-    display_printf("Line 3: CCCC\n");
-    hal_delay(5000);
-
+#if !defined(STM32F429xx)
+    // SD card bootloader update (not available on DISC1 due to pin conflict)
     sdcard_init();
 
     if (check_sdcard()) {
         return copy_sdcard() == sectrue ? 0 : 3;
     }
+#endif
 
 #if PRODUCTION
     image_header hdr;

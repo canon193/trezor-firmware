@@ -38,7 +38,10 @@
 #include "flash.h"
 #include "mpu.h"
 #include "rng.h"
+// SD card not supported on STM32F429I-DISC1 (pins conflict with LTDC)
+#if !defined(STM32F429xx)
 #include "sdcard.h"
+#endif
 #include "touch.h"
 #include "bl_check.h"
 
@@ -67,7 +70,9 @@ int main(void)
 #endif
 
 #if TREZOR_MODEL == T
+#if !defined(STM32F429xx)
     sdcard_init();
+#endif
     touch_init();
     touch_power_on();
 

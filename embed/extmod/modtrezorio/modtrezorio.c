@@ -27,7 +27,10 @@
 
 #include "modtrezorio-flash.h"
 #include "modtrezorio-sbu.h"
+// SD card not supported on STM32F429I-DISC1 (pins conflict with LTDC)
+#if !defined(STM32F429xx)
 #include "modtrezorio-sdcard.h"
+#endif
 #include "modtrezorio-poll.h"
 #include "modtrezorio-hid.h"
 #include "modtrezorio-vcp.h"
@@ -41,7 +44,9 @@ STATIC const mp_rom_map_elem_t mp_module_trezorio_globals_table[] = {
 
     { MP_ROM_QSTR(MP_QSTR_SBU), MP_ROM_PTR(&mod_trezorio_SBU_type) },
 
+#if !defined(STM32F429xx)
     { MP_ROM_QSTR(MP_QSTR_SDCard), MP_ROM_PTR(&mod_trezorio_SDCard_type) },
+#endif
 
     { MP_ROM_QSTR(MP_QSTR_USB), MP_ROM_PTR(&mod_trezorio_USB_type) },
     { MP_ROM_QSTR(MP_QSTR_HID), MP_ROM_PTR(&mod_trezorio_HID_type) },
