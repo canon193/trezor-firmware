@@ -326,7 +326,7 @@ void display_loader(uint16_t progress, int yoffset, uint16_t fgcolor, uint16_t b
     }
     display_set_window(DISPLAY_RESX / 2 - img_loader_size, DISPLAY_RESY / 2 - img_loader_size + yoffset, DISPLAY_RESX / 2 + img_loader_size - 1, DISPLAY_RESY / 2 + img_loader_size - 1 + yoffset);
     if (icon && memcmp(icon, "TOIg", 4) == 0 && LOADER_ICON_SIZE == *(uint16_t *)(icon + 4) && LOADER_ICON_SIZE == *(uint16_t *)(icon + 6) && iconlen == 12 + *(uint32_t *)(icon + 8)) {
-        uint8_t icondata[LOADER_ICON_SIZE * LOADER_ICON_SIZE / 2];
+        static uint8_t icondata[LOADER_ICON_SIZE * LOADER_ICON_SIZE / 2];
         sinf_inflate(icon + 12, iconlen - 12, inflate_callback_loader, icondata);
         icon = icondata;
     } else {

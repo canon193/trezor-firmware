@@ -168,10 +168,16 @@ int main(void)
     periph_init();
 
     if (sectrue != flash_configure_option_bytes()) {
-        // display is not initialized so don't call ensure
+        // Option bytes needed to be changed - initialize display to show message
+        clear_otg_hs_memory();
+        display_init();
+        display_backlight(255);
+        display_printf("Option bytes were changed\n");
+        display_printf("Erasing storage and halting\n");
+        display_printf("Power cycle to continue\n");
         secbool r = flash_erase_sectors(STORAGE_SECTORS, STORAGE_SECTORS_COUNT, NULL);
         (void)r;
-        return 2;
+        for (;;);  // Halt instead of return, so user sees message
     }
 
     clear_otg_hs_memory();
@@ -201,11 +207,16 @@ int main(void)
 #else
     // Development mode: skip signature verification, just check magic and jump
     const uint32_t *magic = (const uint32_t *)BOOTLOADER_START;
+    display_backlight(255);
+    display_printf("Boardloader dev mode\n");
+    display_printf("Magic at 0x%08x: 0x%08x\n", (unsigned int)BOOTLOADER_START, (unsigned int)magic[0]);
+    display_printf("Expected: 0x%08x\n", (unsigned int)BOOTLOADER_IMAGE_MAGIC);
     if (magic[0] == BOOTLOADER_IMAGE_MAGIC) {
+        display_printf("Jumping to bootloader...\n");
+        hal_delay(1000);
         jump_to(BOOTLOADER_START + IMAGE_HEADER_SIZE);
     } else {
         // No valid bootloader header, show error
-        display_backlight(255);
         display_printf("No bootloader found (dev mode)\n");
         display_printf("Flash bootloader.elf at 0x08020000\n");
         for (;;);
