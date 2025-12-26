@@ -28,7 +28,7 @@
 #define MAX_DISPLAY_RESX    240
 #define MAX_DISPLAY_RESY    320
 #define DISPLAY_RESX        240
-#define DISPLAY_RESY        240
+#define DISPLAY_RESY        320
 
 #elif TREZOR_MODEL == 1
 
