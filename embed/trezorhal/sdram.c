@@ -176,7 +176,7 @@ void sdram_init(void) {
     // SDRAM device configuration
     hsdram.Instance = FMC_SDRAM_DEVICE;
 
-    // Timing configuration for 90 MHz SD clock (180 MHz / 2)
+    // Timing configuration for 84 MHz SD clock (168 MHz / 2)
     // TMRD: 2 Clock cycles
     timing.LoadToActiveDelay = 2;
     // TXSR: min=70ns (7 x 11.11ns)
