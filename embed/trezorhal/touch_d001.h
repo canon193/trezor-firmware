@@ -81,3 +81,7 @@ uint32_t touch_read(void) {
 
     return 0;  // No change
 }
+
+int touch_read_raw(uint16_t *raw_x, uint16_t *raw_y) {
+    return stmpe811_get_raw(raw_x, raw_y) ? 1 : 0;
+}

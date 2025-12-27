@@ -231,6 +231,27 @@ int main(void)
     touch_init();
     touch_power_on();
 
+    // Touch calibration debug - show raw values for 30 seconds
+    display_clear();
+    display_text_center(120, 32, "Touch Calibration Debug", -1, FONT_NORMAL, COLOR_WHITE, COLOR_BLACK);
+    display_text_center(120, 64, "Touch corners, note values", -1, FONT_NORMAL, COLOR_WHITE, COLOR_BLACK);
+
+    uint16_t last_raw_x = 0, last_raw_y = 0;
+    for (int i = 0; i < 3000; i++) {  // 30 seconds
+        uint16_t raw_x, raw_y;
+        if (touch_read_raw(&raw_x, &raw_y)) {
+            if (raw_x != last_raw_x || raw_y != last_raw_y) {
+                char buf[64];
+                mini_snprintf(buf, sizeof(buf), "raw_x=%4d  raw_y=%4d", raw_x, raw_y);
+                display_bar(0, 140, 240, 32, COLOR_BLACK);
+                display_text_center(120, 160, buf, -1, FONT_NORMAL, COLOR_WHITE, COLOR_BLACK);
+                last_raw_x = raw_x;
+                last_raw_y = raw_y;
+            }
+        }
+        hal_delay(10);
+    }
+
     mpu_config_bootloader();
 
 #if PRODUCTION

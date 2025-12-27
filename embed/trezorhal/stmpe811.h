@@ -39,4 +39,7 @@ bool stmpe811_is_touched(void);
 // Get touch state (position and detection status)
 void stmpe811_get_state(stmpe811_state_t *state);
 
+// Get raw touch values (for calibration)
+bool stmpe811_get_raw(uint16_t *raw_x, uint16_t *raw_y);
+
 #endif // __STMPE811_H__

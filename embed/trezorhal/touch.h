@@ -33,6 +33,7 @@ void touch_sensitivity(uint8_t value);
 uint32_t touch_read(void);
 uint32_t touch_click(void);
 uint32_t touch_is_detected(void);
+int touch_read_raw(uint16_t *raw_x, uint16_t *raw_y);  // For calibration debug
 static inline uint16_t touch_unpack_x(uint32_t evt) { return (evt >> 12) & 0xFFF; }
 static inline uint16_t touch_unpack_y(uint32_t evt) { return (evt >> 0) & 0xFFF; }
 static inline uint32_t touch_pack_xy(uint16_t x, uint16_t y) { return ((x & 0xFFF) << 12) | (y & 0xFFF); }

@@ -58,7 +58,7 @@
 // Touch IO pins (for alternate function)
 #define STMPE811_TOUCH_IO_ALL       0xF0  // Pins 4-7 used for touch
 
-static I2C_HandleTypeDef i2c_handle;
+I2C_HandleTypeDef i2c_handle;  // Non-static for debug access
 
 static void i2c_gpio_init(void) {
     GPIO_InitTypeDef gpio = {0};
@@ -213,12 +213,17 @@ void stmpe811_get_state(stmpe811_state_t *state) {
         uint16_t raw_y = (raw >> 8) & 0xFFF;
 
         // Calibration for STM32F429I-DISC1 touchscreen
-        // Y calibration
+        // Match latest Trezor firmware calibration
+
+        // Y calibration - invert first, then clamp
         int16_t y = raw_y - 360;
         y = y / 11;
-        if (y < 0) y = 0;
-        if (y > 319) y = 319;
-        y = 319 - y;  // Invert Y
+        y = 320 - y;  // Invert Y
+        if (y < 0) {
+            y = 0;
+        } else if (y >= 320) {
+            y = 320 - 1;
+        }
 
         // X calibration
         int16_t x;
@@ -228,8 +233,11 @@ void stmpe811_get_state(stmpe811_state_t *state) {
             x = 3800 - raw_x;
         }
         x = x / 15;
-        if (x < 0) x = 0;
-        if (x > 239) x = 239;
+        if (x <= 0) {
+            x = 0;
+        } else if (x > 240) {
+            x = 240 - 1;
+        }
 
         // Apply threshold filter
         uint16_t xDiff = (x > last_x) ? (x - last_x) : (last_x - x);
@@ -249,4 +257,29 @@ void stmpe811_get_state(stmpe811_state_t *state) {
     }
 
     state->TouchDetected = last_detected;
+}
+
+bool stmpe811_get_raw(uint16_t *raw_x, uint16_t *raw_y) {
+    uint8_t ctrl = stmpe811_read_reg(STMPE811_REG_TSC_CTRL);
+    if (!(ctrl & STMPE811_TS_CTRL_STATUS)) {
+        return false;
+    }
+
+    uint8_t fifo_size = stmpe811_read_reg(STMPE811_REG_FIFO_SIZE);
+    if (fifo_size == 0) {
+        return false;
+    }
+
+    uint8_t data[4];
+    stmpe811_read_multiple(STMPE811_REG_TSC_DATA_NON_INC, data, 4);
+
+    uint32_t raw = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+    *raw_x = (raw >> 20) & 0xFFF;
+    *raw_y = (raw >> 8) & 0xFFF;
+
+    // Clear FIFO
+    stmpe811_write_reg(STMPE811_REG_FIFO_STA, 0x01);
+    stmpe811_write_reg(STMPE811_REG_FIFO_STA, 0x00);
+
+    return true;
 }
