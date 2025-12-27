@@ -83,11 +83,10 @@ static PCD_HandleTypeDef pcd_hs_handle;
 void HAL_PCD_MspInit(PCD_HandleTypeDef *hpcd)
 {
   GPIO_InitTypeDef  GPIO_InitStruct;
-  extern void display_printf(const char *fmt, ...);
 
+#if defined(USE_USB_FS)
   if(hpcd->Instance == USB_OTG_FS)
   {
-    display_printf("USB FS GPIO init\n");
     /* Configure USB FS GPIOs */
     __HAL_RCC_GPIOA_CLK_ENABLE();
 
@@ -99,40 +98,21 @@ void HAL_PCD_MspInit(PCD_HandleTypeDef *hpcd)
     GPIO_InitStruct.Alternate = GPIO_AF10_OTG_FS;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-	/* Configure VBUS Pin */
-#if defined(MICROPY_HW_USB_VBUS_DETECT_PIN)
-    // USB VBUS detect pin is always A9
-    GPIO_InitStruct.Pin = GPIO_PIN_9;
-    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-#endif
-
-    /* Configure ID pin */
-#if defined(MICROPY_HW_USB_OTG_ID_PIN)
-    // USB ID pin is always A10
-    GPIO_InitStruct.Pin = GPIO_PIN_10;
-    GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
-    GPIO_InitStruct.Pull = GPIO_PULLUP;
-    GPIO_InitStruct.Alternate = GPIO_AF10_OTG_FS;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-#endif
-
     /* Enable USB FS Clocks */
     __HAL_RCC_USB_OTG_FS_CLK_ENABLE();
 
     /* Set USBFS Interrupt priority */
-    HAL_NVIC_SetPriority(OTG_FS_IRQn, IRQ_PRI_OTG_FS, IRQ_SUBPRI_OTG_FS);
+    NVIC_SetPriority(OTG_FS_IRQn, IRQ_PRI_OTG_FS);
 
     /* Enable USBFS Interrupt */
-    HAL_NVIC_EnableIRQ(OTG_FS_IRQn);
+    NVIC_EnableIRQ(OTG_FS_IRQn);
   }
+#endif
 #if defined(USE_USB_HS)
-  else if(hpcd->Instance == USB_OTG_HS)
-  {
+  if (hpcd->Instance == USB_OTG_HS) {
 #if defined(USE_USB_HS_IN_FS)
 
-    /* Configure USB FS GPIOs */
+    /* Configure USB HS GPIOs */
     __HAL_RCC_GPIOB_CLK_ENABLE();
 
     /* Configure DM DP Pins */
@@ -143,25 +123,6 @@ void HAL_PCD_MspInit(PCD_HandleTypeDef *hpcd)
     GPIO_InitStruct.Alternate = GPIO_AF12_OTG_HS_FS;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-#if defined(MICROPY_HW_USB_VBUS_DETECT_PIN)
-    /* Configure VBUS Pin */
-    GPIO_InitStruct.Pin = GPIO_PIN_13;
-    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-    GPIO_InitStruct.Alternate = GPIO_AF12_OTG_HS_FS;
-    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-#endif
-
-#if defined(MICROPY_HW_USB_OTG_ID_PIN)
-    /* Configure ID pin */
-    GPIO_InitStruct.Pin = GPIO_PIN_12;
-    GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
-    GPIO_InitStruct.Pull = GPIO_PULLUP;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-    GPIO_InitStruct.Alternate = GPIO_AF12_OTG_HS_FS;
-    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-#endif
     /*
      * Enable calling WFI and correct
      * function of the embedded USB_FS_IN_HS phy
@@ -230,11 +191,11 @@ void HAL_PCD_MspInit(PCD_HandleTypeDef *hpcd)
     __HAL_RCC_USB_OTG_HS_ULPI_CLK_ENABLE();
 #endif // !USE_USB_HS_IN_FS
 
-    /* Set USBHS Interrupt to the lowest priority */
-    HAL_NVIC_SetPriority(OTG_HS_IRQn, IRQ_PRI_OTG_HS, IRQ_SUBPRI_OTG_HS);
+    /* Set USBHS Interrupt priority */
+    NVIC_SetPriority(OTG_HS_IRQn, IRQ_PRI_OTG_HS);
 
     /* Enable USBHS Interrupt */
-    HAL_NVIC_EnableIRQ(OTG_HS_IRQn);
+    NVIC_EnableIRQ(OTG_HS_IRQn);
   }
 #endif  // USE_USB_HS
 }
@@ -411,101 +372,62 @@ void HAL_PCD_DisconnectCallback(PCD_HandleTypeDef *hpcd)
 USBD_StatusTypeDef  USBD_LL_Init (USBD_HandleTypeDef *pdev)
 {
 #if defined(USE_USB_FS)
-if (pdev->id ==  USB_PHY_FS_ID)
-{
-  /*Set LL Driver parameters */
-  pcd_fs_handle.Instance = USB_OTG_FS;
-  pcd_fs_handle.Init.dev_endpoints = 6;
-  pcd_fs_handle.Init.use_dedicated_ep1 = 0;
-  pcd_fs_handle.Init.ep0_mps = 0x40;
-  pcd_fs_handle.Init.dma_enable = 0;
-  pcd_fs_handle.Init.low_power_enable = 0;
-  pcd_fs_handle.Init.phy_itface = PCD_PHY_EMBEDDED;
-  pcd_fs_handle.Init.Sof_enable = 1;
-  pcd_fs_handle.Init.speed = PCD_SPEED_FULL;
-#if defined(MCU_SERIES_L4)
-  pcd_fs_handle.Init.lpm_enable = DISABLE;
-  pcd_fs_handle.Init.battery_charging_enable = DISABLE;
-#endif
-  pcd_fs_handle.Init.vbus_sensing_enable = 0; // No VBUS Sensing on STM32F429I-DISC1
-  /* Link The driver to the stack */
-  pcd_fs_handle.pData = pdev;
-  pdev->pData = &pcd_fs_handle;
-  /*Initialize LL Driver */
-  HAL_PCD_Init(&pcd_fs_handle);
+  if (pdev->id == USB_PHY_FS_ID) {
+    /*Set LL Driver parameters */
+    pcd_fs_handle.Instance = USB_OTG_FS;
+    pcd_fs_handle.Init.dev_endpoints = 6;
+    pcd_fs_handle.Init.use_dedicated_ep1 = 0;
+    pcd_fs_handle.Init.ep0_mps = 0x40;
+    pcd_fs_handle.Init.dma_enable = 0;
+    pcd_fs_handle.Init.low_power_enable = 0;
+    pcd_fs_handle.Init.phy_itface = PCD_PHY_EMBEDDED;
+    pcd_fs_handle.Init.Sof_enable = 1;
+    pcd_fs_handle.Init.speed = PCD_SPEED_FULL;
+    pcd_fs_handle.Init.vbus_sensing_enable = 0;
+    /* Link The driver to the stack */
+    pcd_fs_handle.pData = pdev;
+    pdev->pData = &pcd_fs_handle;
+    /*Initialize LL Driver */
+    HAL_PCD_Init(&pcd_fs_handle);
 
-  // OTG_FS has 1.25KiB (320 words) dedicated RAM
-  // RxFiFo = 128 words, TxFiFo = 32 words each x 6 = 192 words, total = 320 words
-  const uint16_t transmit_fifo_size = 32;
-  const uint16_t receive_fifo_size = 128;
-  HAL_PCDEx_SetRxFiFo(&pcd_fs_handle, receive_fifo_size);
-  for (uint16_t i = 0; i < 6; i++) {
-    HAL_PCDEx_SetTxFiFo(&pcd_fs_handle, i, transmit_fifo_size);
+    // OTG_FS has 1.25KiB (320 words) dedicated RAM
+    const uint16_t transmit_fifo_size = 32;
+    const uint16_t receive_fifo_size = 128;
+    HAL_PCDEx_SetRxFiFo(&pcd_fs_handle, receive_fifo_size);
+    for (uint16_t i = 0; i < 6; i++) {
+      HAL_PCDEx_SetTxFiFo(&pcd_fs_handle, i, transmit_fifo_size);
+    }
   }
-}
 #endif
-#if defined(USE_USB_HS)
-if (pdev->id == USB_PHY_HS_ID)
-{
 #if defined(USE_USB_HS_IN_FS)
-  /*Set LL Driver parameters */
-  pcd_hs_handle.Instance = USB_OTG_HS;
-  pcd_hs_handle.Init.dev_endpoints = 4;
-  pcd_hs_handle.Init.use_dedicated_ep1 = 0;
-  pcd_hs_handle.Init.ep0_mps = 0x40;
-  pcd_hs_handle.Init.dma_enable = 0;
-  pcd_hs_handle.Init.low_power_enable = 0;
-  pcd_hs_handle.Init.phy_itface = PCD_PHY_EMBEDDED;
-  pcd_hs_handle.Init.Sof_enable = 1;
-  pcd_hs_handle.Init.speed = PCD_SPEED_HIGH_IN_FULL;
-#if !defined(MICROPY_HW_USB_VBUS_DETECT_PIN)
-  pcd_hs_handle.Init.vbus_sensing_enable = 0; // No VBUS Sensing on USB0
-#else
-  pcd_hs_handle.Init.vbus_sensing_enable = 1;
+  // STM32F429I-DISC1 uses the OTG_HS peripheral in FS mode
+  if (pdev->id == USB_PHY_HS_ID) {
+    /* Set LL Driver parameters */
+    pcd_hs_handle.Instance = USB_OTG_HS;
+    pcd_hs_handle.Init.dev_endpoints = 6;
+    pcd_hs_handle.Init.use_dedicated_ep1 = 0;
+    pcd_hs_handle.Init.ep0_mps = 0x40;
+    pcd_hs_handle.Init.dma_enable = 0;
+    pcd_hs_handle.Init.low_power_enable = 0;
+    pcd_hs_handle.Init.phy_itface = PCD_PHY_EMBEDDED;
+    pcd_hs_handle.Init.Sof_enable = 1;
+    pcd_hs_handle.Init.speed = PCD_SPEED_HIGH_IN_FULL;
+    pcd_hs_handle.Init.vbus_sensing_enable = 0;
+    /* Link The driver to the stack */
+    pcd_hs_handle.pData = pdev;
+    pdev->pData = &pcd_hs_handle;
+    /* Initialize LL Driver */
+    HAL_PCD_Init(&pcd_hs_handle);
+
+    // OTG_HS has 4KiB (1024 words) dedicated RAM
+    const uint16_t transmit_fifo_size = 144;
+    const uint16_t receive_fifo_size = 160;
+    HAL_PCDEx_SetRxFiFo(&pcd_hs_handle, receive_fifo_size);
+    for (uint16_t i = 0; i < 6; i++) {
+      HAL_PCDEx_SetTxFiFo(&pcd_hs_handle, i, transmit_fifo_size);
+    }
+  }
 #endif
-  /* Link The driver to the stack */
-  pcd_hs_handle.pData = pdev;
-  pdev->pData = &pcd_hs_handle;
-  /*Initialize LL Driver */
-  HAL_PCD_Init(&pcd_hs_handle);
-
-  HAL_PCDEx_SetRxFiFo(&pcd_hs_handle, 0x80);
-  HAL_PCDEx_SetTxFiFo(&pcd_hs_handle, 0, 0x20);
-  HAL_PCDEx_SetTxFiFo(&pcd_hs_handle, 1, 0x40);
-  HAL_PCDEx_SetTxFiFo(&pcd_hs_handle, 2, 0x20);
-  HAL_PCDEx_SetTxFiFo(&pcd_hs_handle, 3, 0x40);
-#else // !defined(USE_USB_HS_IN_FS)
-  /*Set LL Driver parameters */
-  pcd_hs_handle.Instance = USB_OTG_HS;
-  pcd_hs_handle.Init.dev_endpoints = 6;
-  pcd_hs_handle.Init.use_dedicated_ep1 = 0;
-  pcd_hs_handle.Init.ep0_mps = 0x40;
-
-  /* Be aware that enabling USB-DMA mode will result in data being sent only by
-     multiple of 4 packet sizes. This is due to the fact that USB-DMA does
-     not allow sending data from non word-aligned addresses.
-     For this specific application, it is advised to not enable this option
-     unless required. */
-  pcd_hs_handle.Init.dma_enable = 0;
-
-  pcd_hs_handle.Init.low_power_enable = 0;
-  pcd_hs_handle.Init.phy_itface = PCD_PHY_ULPI;
-  pcd_hs_handle.Init.Sof_enable = 1;
-  pcd_hs_handle.Init.speed = PCD_SPEED_HIGH;
-  pcd_hs_handle.Init.vbus_sensing_enable = 1;
-  /* Link The driver to the stack */
-  pcd_hs_handle.pData = pdev;
-  pdev->pData = &pcd_hs_handle;
-  /*Initialize LL Driver */
-  HAL_PCD_Init(&pcd_hs_handle);
-
-  HAL_PCDEx_SetRxFiFo(&pcd_hs_handle, 0x200);
-  HAL_PCDEx_SetTxFiFo(&pcd_hs_handle, 0, 0x80);
-  HAL_PCDEx_SetTxFiFo(&pcd_hs_handle, 1, 0x174);
-
-#endif  // !USE_USB_HS_IN_FS
-}
-#endif  // USE_USB_HS
   return USBD_OK;
 }
 
