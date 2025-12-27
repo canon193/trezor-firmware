@@ -76,6 +76,10 @@ int main(void)
     touch_init();
     touch_power_on();
 
+    // STM32F429I-DISC1 needs display_init() in firmware (SDRAM framebuffer)
+#if defined(STM32F429xx)
+    display_init();
+#endif
     display_clear();
 #endif
 
