@@ -48,8 +48,9 @@
 
 // STM32F429xx for STM32F429I-DISC1 board
 #ifdef STM32F429xx
-// STM32F429I-DISC1 User USB connector (CN5) uses USB OTG FS on PA11/PA12
-#define USE_USB_FS
+// USB OTG HS in FS mode on PB14/PB15 (matches latest Trezor firmware)
+#define USE_USB_HS
+#define USE_USB_HS_IN_FS
 #define HAL_LTDC_MODULE_ENABLED
 #else
 #error Unsupported MCU - This build targets STM32F429xx only

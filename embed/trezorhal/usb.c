@@ -70,10 +70,6 @@ static secbool __wur check_desc_str(const char *s) {
 }
 
 void usb_init(const usb_dev_info_t *dev_info) {
-    // Debug: verify USB init is called
-    extern void display_printf(const char *fmt, ...);
-    display_printf("USB init: PHY_ID=%d\n", USB_PHY_ID);
-
     // enable/disable USB 2.1 features
     usb21_enabled = dev_info->usb21_enabled;
     usb21_landing = dev_info->usb21_landing;
@@ -130,8 +126,6 @@ void usb_deinit(void) {
 }
 
 void usb_start(void) {
-    extern void display_printf(const char *fmt, ...);
-    display_printf("USB start\n");
     USBD_Start(&usb_dev_handle);
 }
 
