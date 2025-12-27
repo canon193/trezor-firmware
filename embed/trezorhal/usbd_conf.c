@@ -413,7 +413,7 @@ if (pdev->id ==  USB_PHY_FS_ID)
 {
   /*Set LL Driver parameters */
   pcd_fs_handle.Instance = USB_OTG_FS;
-  pcd_fs_handle.Init.dev_endpoints = 4;
+  pcd_fs_handle.Init.dev_endpoints = 6;
   pcd_fs_handle.Init.use_dedicated_ep1 = 0;
   pcd_fs_handle.Init.ep0_mps = 0x40;
   pcd_fs_handle.Init.dma_enable = 0;
@@ -425,22 +425,21 @@ if (pdev->id ==  USB_PHY_FS_ID)
   pcd_fs_handle.Init.lpm_enable = DISABLE;
   pcd_fs_handle.Init.battery_charging_enable = DISABLE;
 #endif
-#if !defined(MICROPY_HW_USB_VBUS_DETECT_PIN)
-  pcd_fs_handle.Init.vbus_sensing_enable = 0; // No VBUS Sensing on USB0
-#else
-  pcd_fs_handle.Init.vbus_sensing_enable = 1;
-#endif
+  pcd_fs_handle.Init.vbus_sensing_enable = 0; // No VBUS Sensing on STM32F429I-DISC1
   /* Link The driver to the stack */
   pcd_fs_handle.pData = pdev;
   pdev->pData = &pcd_fs_handle;
   /*Initialize LL Driver */
   HAL_PCD_Init(&pcd_fs_handle);
 
-  HAL_PCDEx_SetRxFiFo(&pcd_fs_handle, 0x80);
-  HAL_PCDEx_SetTxFiFo(&pcd_fs_handle, 0, 0x20);
-  HAL_PCDEx_SetTxFiFo(&pcd_fs_handle, 1, 0x40);
-  HAL_PCDEx_SetTxFiFo(&pcd_fs_handle, 2, 0x20);
-  HAL_PCDEx_SetTxFiFo(&pcd_fs_handle, 3, 0x40);
+  // OTG_FS has 1.25KiB (320 words) dedicated RAM
+  // RxFiFo = 128 words, TxFiFo = 32 words each x 6 = 192 words, total = 320 words
+  const uint16_t transmit_fifo_size = 32;
+  const uint16_t receive_fifo_size = 128;
+  HAL_PCDEx_SetRxFiFo(&pcd_fs_handle, receive_fifo_size);
+  for (uint16_t i = 0; i < 6; i++) {
+    HAL_PCDEx_SetTxFiFo(&pcd_fs_handle, i, transmit_fifo_size);
+  }
 }
 #endif
 #if defined(USE_USB_HS)
