@@ -259,6 +259,10 @@ void stmpe811_get_state(stmpe811_state_t *state) {
     state->TouchDetected = last_detected;
 }
 
+// Debug: store last read bytes for display
+uint8_t stmpe811_debug_data[4] = {0};
+uint8_t stmpe811_debug_fifo_size = 0;
+
 bool stmpe811_get_raw(uint16_t *raw_x, uint16_t *raw_y) {
     uint8_t ctrl = stmpe811_read_reg(STMPE811_REG_TSC_CTRL);
     if (!(ctrl & STMPE811_TS_CTRL_STATUS)) {
@@ -266,12 +270,19 @@ bool stmpe811_get_raw(uint16_t *raw_x, uint16_t *raw_y) {
     }
 
     uint8_t fifo_size = stmpe811_read_reg(STMPE811_REG_FIFO_SIZE);
+    stmpe811_debug_fifo_size = fifo_size;
     if (fifo_size == 0) {
         return false;
     }
 
     uint8_t data[4];
     stmpe811_read_multiple(STMPE811_REG_TSC_DATA_NON_INC, data, 4);
+
+    // Store for debug
+    stmpe811_debug_data[0] = data[0];
+    stmpe811_debug_data[1] = data[1];
+    stmpe811_debug_data[2] = data[2];
+    stmpe811_debug_data[3] = data[3];
 
     uint32_t raw = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
     *raw_x = (raw >> 20) & 0xFFF;

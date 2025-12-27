@@ -251,6 +251,17 @@ int main(void)
 
         if (detected) {
             touch_count++;
+            // Show raw bytes from I2C
+            extern uint8_t stmpe811_debug_data[4];
+            extern uint8_t stmpe811_debug_fifo_size;
+            char bytes[64];
+            mini_snprintf(bytes, sizeof(bytes), "fifo=%d [%02x %02x %02x %02x]",
+                stmpe811_debug_fifo_size,
+                stmpe811_debug_data[0], stmpe811_debug_data[1],
+                stmpe811_debug_data[2], stmpe811_debug_data[3]);
+            display_bar(0, 180, 240, 20, COLOR_BLACK);
+            display_text_center(120, 195, bytes, -1, FONT_NORMAL, COLOR_WHITE, COLOR_BLACK);
+
             if (raw_x != last_raw_x || raw_y != last_raw_y) {
                 char buf[64];
                 mini_snprintf(buf, sizeof(buf), "raw_x=%4d  raw_y=%4d", raw_x, raw_y);
