@@ -126,6 +126,9 @@ build_unix_raspi: res ## build unix port for Raspberry Pi
 	$(SCONS) CFLAGS="$(CFLAGS)" $(UNIX_BUILD_DIR)/micropython $(UNIX_PORT_OPTS) TREZOR_EMULATOR_RASPI=1
 
 build_cross: ## build mpy-cross port
+	@# Add GCC compatibility flags for newer compilers
+	@grep -q "Wno-dangling-pointer" vendor/micropython/mpy-cross/Makefile || \
+		sed -i 's/CWARN += -Wpointer-arith -Wuninitialized/CWARN += -Wpointer-arith -Wuninitialized -Wno-dangling-pointer -Wno-enum-int-mismatch/' vendor/micropython/mpy-cross/Makefile
 	$(MAKE) -C vendor/micropython/mpy-cross $(CROSS_PORT_OPTS)
 
 ## clean commands:
