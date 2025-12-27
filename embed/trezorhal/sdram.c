@@ -160,6 +160,14 @@ static void sdram_initialization_sequence(void) {
 }
 
 void sdram_init(void) {
+    // Check if SDRAM is already initialized (by bootloader)
+    // FMC clock enabled and SDRAM bank 2 not in power-down = already init
+    if (__HAL_RCC_FMC_IS_CLK_ENABLED() &&
+        (FMC_SDRAM_DEVICE->SDCMR & FMC_SDCMR_MODE) == 0) {
+        // SDRAM already initialized, skip re-init
+        return;
+    }
+
     // Enable FMC clock
     __HAL_RCC_FMC_CLK_ENABLE();
 
