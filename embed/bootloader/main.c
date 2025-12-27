@@ -231,49 +231,6 @@ int main(void)
     touch_init();
     touch_power_on();
 
-    // Touch calibration debug - show raw values for 60 seconds
-    display_clear();
-    display_text_center(120, 32, "Touch Calibration Debug", -1, FONT_NORMAL, COLOR_WHITE, COLOR_BLACK);
-    display_text_center(120, 64, "Touch corners, note values", -1, FONT_NORMAL, COLOR_WHITE, COLOR_BLACK);
-
-    // Show touch detected status
-    int touch_count = 0;
-    uint16_t last_raw_x = 0, last_raw_y = 0;
-    for (int i = 0; i < 6000; i++) {  // 60 seconds
-        uint16_t raw_x = 0, raw_y = 0;
-        int detected = touch_read_raw(&raw_x, &raw_y);
-
-        // Show detection status
-        char status[32];
-        mini_snprintf(status, sizeof(status), "detected=%d count=%d", detected, touch_count);
-        display_bar(0, 100, 240, 20, COLOR_BLACK);
-        display_text_center(120, 115, status, -1, FONT_NORMAL, COLOR_WHITE, COLOR_BLACK);
-
-        if (detected) {
-            touch_count++;
-            // Show raw bytes from I2C
-            extern uint8_t stmpe811_debug_data[4];
-            extern uint8_t stmpe811_debug_fifo_size;
-            char bytes[64];
-            mini_snprintf(bytes, sizeof(bytes), "fifo=%d [%02x %02x %02x %02x]",
-                stmpe811_debug_fifo_size,
-                stmpe811_debug_data[0], stmpe811_debug_data[1],
-                stmpe811_debug_data[2], stmpe811_debug_data[3]);
-            display_bar(0, 180, 240, 20, COLOR_BLACK);
-            display_text_center(120, 195, bytes, -1, FONT_NORMAL, COLOR_WHITE, COLOR_BLACK);
-
-            if (raw_x != last_raw_x || raw_y != last_raw_y) {
-                char buf[64];
-                mini_snprintf(buf, sizeof(buf), "raw_x=%4d  raw_y=%4d", raw_x, raw_y);
-                display_bar(0, 140, 240, 32, COLOR_BLACK);
-                display_text_center(120, 160, buf, -1, FONT_NORMAL, COLOR_WHITE, COLOR_BLACK);
-                last_raw_x = raw_x;
-                last_raw_y = raw_y;
-            }
-        }
-        hal_delay(10);
-    }
-
     mpu_config_bootloader();
 
 #if PRODUCTION

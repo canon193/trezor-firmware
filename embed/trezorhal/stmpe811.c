@@ -213,30 +213,29 @@ void stmpe811_get_state(stmpe811_state_t *state) {
         uint16_t raw_y = (raw >> 8) & 0xFFF;
 
         // Calibration for STM32F429I-DISC1 touchscreen
-        // Match latest Trezor firmware calibration
+        // Based on measured corner values:
+        // Top-left: raw_x=3511, raw_y=498
+        // Top-right: raw_x=646, raw_y=1090
+        // Bottom-left: raw_x=3306, raw_y=3544
+        // Bottom-right: raw_x=646, raw_y=3643
+        //
+        // X range: 646 (right) to 3500 (left) - inverted
+        // Y range: 500 (top) to 3600 (bottom)
 
-        // Y calibration - invert first, then clamp
-        int16_t y = raw_y - 360;
-        y = y / 11;
-        y = 320 - y;  // Invert Y
+        // X calibration: raw_x decreases from left to right
+        int16_t x = (3500 - (int16_t)raw_x) * 240 / 2850;
+        if (x < 0) {
+            x = 0;
+        } else if (x >= 240) {
+            x = 239;
+        }
+
+        // Y calibration: raw_y increases from top to bottom
+        int16_t y = ((int16_t)raw_y - 500) * 320 / 3100;
         if (y < 0) {
             y = 0;
         } else if (y >= 320) {
-            y = 320 - 1;
-        }
-
-        // X calibration
-        int16_t x;
-        if (raw_x <= 3000) {
-            x = 3870 - raw_x;
-        } else {
-            x = 3800 - raw_x;
-        }
-        x = x / 15;
-        if (x <= 0) {
-            x = 0;
-        } else if (x > 240) {
-            x = 240 - 1;
+            y = 319;
         }
 
         // Apply threshold filter
