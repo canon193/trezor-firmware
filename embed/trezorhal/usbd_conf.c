@@ -83,9 +83,11 @@ static PCD_HandleTypeDef pcd_hs_handle;
 void HAL_PCD_MspInit(PCD_HandleTypeDef *hpcd)
 {
   GPIO_InitTypeDef  GPIO_InitStruct;
+  extern void display_printf(const char *fmt, ...);
 
   if(hpcd->Instance == USB_OTG_FS)
   {
+    display_printf("USB FS GPIO init\n");
     /* Configure USB FS GPIOs */
     __HAL_RCC_GPIOA_CLK_ENABLE();
 
