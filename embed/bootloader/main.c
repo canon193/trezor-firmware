@@ -30,11 +30,18 @@
 #include "secbool.h"
 #include "touch.h"
 #include "touch_calib.h"
+#include "stmpe811.h"
+#include "i2c_bus.h"
 #include "usb.h"
 #include "version.h"
 
 #include "bootui.h"
 #include "messages.h"
+
+// Debug colors (RGB565 format)
+#define COLOR_GREEN         0x07E0
+#define COLOR_RED           0xF800
+#define COLOR_GRAY          0x8410
 // #include "mpu.h"
 
 const uint8_t BOOTLOADER_KEY_M = 2;
@@ -235,6 +242,11 @@ int main(void)
     // Give touch controller time to stabilize
     hal_delay(50);
 
+    // Initialize touch calibration with defaults if not present
+    if (touch_calib_is_valid() != sectrue) {
+        touch_calib_write_defaults();
+    }
+
     mpu_config_bootloader();
 
 #if PRODUCTION
@@ -244,26 +256,113 @@ int main(void)
 main_start:
 
     display_clear();
+    display_backlight(200);
 
-    // Show prompt for touch calibration
-    display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY / 2 - 10,
-                       "Touch screen now", -1, FONT_NORMAL, COLOR_WHITE, COLOR_BLACK);
-    display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY / 2 + 15,
-                       "to calibrate...", -1, FONT_NORMAL, COLOR_WHITE, COLOR_BLACK);
-    display_refresh();
-    display_backlight(150);
+    // Debug: Read and display STMPE811 chip ID with I2C status
+    uint16_t chip_id = 0;
+    uint8_t i2c_status_msb = 0, i2c_status_lsb = 0;
+    i2c_status_t i2c_result = stmpe811_ReadID_Debug(&chip_id, &i2c_status_msb, &i2c_status_lsb);
+    char dbg_buf[64];
 
-    // Extended delay to detect touch (1.5 seconds)
-    uint32_t touched = 0;
-    for (int i = 0; i < 1500; i++) {
-        touched = touch_is_detected() | touch_read();
-        if (touched) {
-            break;
-        }
-        hal_delay(1);
+    display_text(10, 25, "Touch Debug:", -1, FONT_NORMAL, COLOR_WHITE, COLOR_BLACK);
+
+    // Show I2C status (0=OK, 1=TIMEOUT, 2=NACK, 3=ERROR)
+    static const char* i2c_status_names[] = {"OK", "TIMEOUT", "NACK", "ERROR"};
+    mini_snprintf(dbg_buf, sizeof(dbg_buf), "I2C: %s (MSB:%d LSB:%d)",
+                  i2c_status_names[i2c_result < 4 ? i2c_result : 3],
+                  i2c_status_msb, i2c_status_lsb);
+    display_text(10, 45, dbg_buf, -1, FONT_NORMAL,
+                 (i2c_result == I2C_STATUS_OK) ? COLOR_GREEN : COLOR_RED, COLOR_BLACK);
+
+    mini_snprintf(dbg_buf, sizeof(dbg_buf), "Chip ID: 0x%04X", chip_id);
+    display_text(10, 65, dbg_buf, -1, FONT_NORMAL,
+                 (chip_id == 0x0811) ? COLOR_GREEN : COLOR_RED, COLOR_BLACK);
+
+    if (chip_id == 0x0811) {
+        display_text(150, 65, "(OK)", -1, FONT_NORMAL, COLOR_GREEN, COLOR_BLACK);
+    } else if (chip_id == 0xFFFF) {
+        display_text(150, 65, "(NO I2C)", -1, FONT_NORMAL, COLOR_RED, COLOR_BLACK);
+    } else if (i2c_result == I2C_STATUS_NACK) {
+        display_text(150, 65, "(NACK)", -1, FONT_NORMAL, COLOR_RED, COLOR_BLACK);
+    } else if (i2c_result == I2C_STATUS_TIMEOUT) {
+        display_text(150, 65, "(TIMEOUT)", -1, FONT_NORMAL, COLOR_RED, COLOR_BLACK);
+    } else {
+        display_text(150, 65, "(WRONG)", -1, FONT_NORMAL, COLOR_RED, COLOR_BLACK);
     }
 
-    // Clear the prompt
+    // Show calibration status
+    if (touch_calib_is_valid() == sectrue) {
+        display_text(10, 85, "Calib: LOADED from flash", -1, FONT_NORMAL, COLOR_GREEN, COLOR_BLACK);
+    } else {
+        display_text(10, 85, "Calib: DEFAULTS (no flash)", -1, FONT_NORMAL, COLOR_GRAY, COLOR_BLACK);
+    }
+
+    display_text(10, 110, "Touch screen to calibrate...", -1, FONT_NORMAL, COLOR_WHITE, COLOR_BLACK);
+    display_text(10, 135, "Waiting 3 seconds...", -1, FONT_NORMAL, COLOR_GRAY, COLOR_BLACK);
+
+    display_refresh();
+
+    // Extended delay to detect touch (3 seconds) with live debug
+    uint32_t touched = 0;
+    uint32_t loop_count = 0;
+    uint8_t last_tsc = 0xFF, last_fifo = 0xFF;
+    uint32_t last_detected = 0xFF;
+    (void)last_detected;  // May be used only in condition checks
+
+    for (int i = 0; i < 3000; i++) {
+        uint8_t tsc_ctrl = stmpe811_ReadTscCtrl();
+        uint8_t fifo_size = stmpe811_ReadFifoSize();
+        uint32_t is_detected = touch_is_detected();
+        uint32_t read_val = touch_read();
+
+        // Update display only when values change (reduce flicker)
+        if (tsc_ctrl != last_tsc || fifo_size != last_fifo ||
+            is_detected != last_detected || (loop_count % 500 == 0)) {
+
+            // Clear debug area
+            display_bar(10, 155, 230, 130, COLOR_BLACK);
+
+            mini_snprintf(dbg_buf, sizeof(dbg_buf), "TSC_CTRL: 0x%02X", tsc_ctrl);
+            display_text(10, 170, dbg_buf, -1, FONT_NORMAL,
+                        (tsc_ctrl & 0x80) ? COLOR_GREEN : COLOR_GRAY, COLOR_BLACK);
+
+            mini_snprintf(dbg_buf, sizeof(dbg_buf), "FIFO_SIZE: %d", fifo_size);
+            display_text(10, 195, dbg_buf, -1, FONT_NORMAL,
+                        (fifo_size > 0) ? COLOR_GREEN : COLOR_GRAY, COLOR_BLACK);
+
+            mini_snprintf(dbg_buf, sizeof(dbg_buf), "is_detected: %lu", is_detected);
+            display_text(10, 220, dbg_buf, -1, FONT_NORMAL,
+                        is_detected ? COLOR_GREEN : COLOR_GRAY, COLOR_BLACK);
+
+            mini_snprintf(dbg_buf, sizeof(dbg_buf), "touch_read: 0x%08lX", read_val);
+            display_text(10, 245, dbg_buf, -1, FONT_NORMAL,
+                        read_val ? COLOR_GREEN : COLOR_GRAY, COLOR_BLACK);
+
+            mini_snprintf(dbg_buf, sizeof(dbg_buf), "Loop: %lu / 3000", loop_count);
+            display_text(10, 275, dbg_buf, -1, FONT_NORMAL, COLOR_GRAY, COLOR_BLACK);
+
+            display_refresh();
+
+            last_tsc = tsc_ctrl;
+            last_fifo = fifo_size;
+            last_detected = is_detected;
+        }
+
+        touched = is_detected | read_val;
+        if (touched) {
+            // Show touch detected message
+            display_bar(10, 295, 230, 30, COLOR_BLACK);
+            display_text(10, 310, "TOUCH DETECTED!", -1, FONT_NORMAL, COLOR_GREEN, COLOR_BLACK);
+            display_refresh();
+            hal_delay(500);  // Show the message briefly
+            break;
+        }
+
+        hal_delay(1);
+        loop_count++;
+    }
+
+    // Clear the debug screen
     display_clear();
 
     vendor_header vhdr;
@@ -337,8 +436,13 @@ main_start:
 
         if (INPUT_CONFIRM == calib_response) {
             // User wants to calibrate - run calibration
-            touch_calib_run();
-            // After calibration, restart to apply new calibration
+            if (touch_calib_run() == sectrue) {
+                // Calibration successful - jump to firmware
+                ui_fadeout();
+                mpu_config_off();
+                jump_to(FIRMWARE_START + vhdr.hdrlen + IMAGE_HEADER_SIZE);
+            }
+            // Calibration failed - restart
             goto main_start;
         }
 

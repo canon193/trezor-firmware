@@ -167,4 +167,15 @@ void touch_calib_get_defaults(touch_calib_data_t *data);
  */
 secbool touch_calib_erase(void);
 
+/*
+ * Write default calibration to flash
+ *
+ * Writes safe default calibration parameters to flash.
+ * This should be called once during production or if
+ * calibration data is corrupted.
+ *
+ * Returns: sectrue on success
+ */
+secbool touch_calib_write_defaults(void);
+
 #endif /* TREZORHAL_TOUCH_CALIB_H */

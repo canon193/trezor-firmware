@@ -32,8 +32,9 @@
 #define STMPE811_ID 0x0811
 
 /* Identification registers & System Control */
-#define STMPE811_REG_CHP_ID_LSB 0x00
-#define STMPE811_REG_CHP_ID_MSB 0x01
+/* Note: STMPE811 datasheet shows 0x00=MSB(0x08), 0x01=LSB(0x11) */
+#define STMPE811_REG_CHP_ID_MSB 0x00
+#define STMPE811_REG_CHP_ID_LSB 0x01
 #define STMPE811_REG_ID_VER 0x02
 
 /* IO expander functionalities */
@@ -320,4 +321,77 @@ void BSP_TS_GetState(TS_StateTypeDef *TsState) {
     }
 
     TsState->TouchDetected = _detected;
+}
+
+/* I2C read with status return for debugging */
+static i2c_status_t IOE_Read_Status(uint8_t Addr, uint8_t Reg, uint8_t *value) {
+    *value = 0;
+
+    i2c_op_t ops[] = {
+        {
+            .flags = I2C_FLAG_TX | I2C_FLAG_EMBED,
+            .size = 1,
+            .data = {Reg},
+        },
+        {
+            .flags = I2C_FLAG_RX,
+            .size = 1,
+            .ptr = value,
+        },
+    };
+
+    i2c_packet_t pkt = {
+        .address = TS_I2C_ADDRESS,
+        .timeout = I2C_TIMEOUT,
+        .op_count = ARRAY_LENGTH(ops),
+        .ops = ops,
+    };
+
+    return i2c_bus_submit_and_wait(g_i2c_bus, &pkt);
+}
+
+uint16_t stmpe811_ReadID(void) {
+    if (g_i2c_bus == NULL) {
+        return 0xFFFF;  // Error: I2C not initialized
+    }
+    uint8_t id_msb = IOE_Read(TS_I2C_ADDRESS, STMPE811_REG_CHP_ID_MSB);
+    uint8_t id_lsb = IOE_Read(TS_I2C_ADDRESS, STMPE811_REG_CHP_ID_LSB);
+    return (id_msb << 8) | id_lsb;
+}
+
+/* Debug function: Read chip ID with I2C status */
+i2c_status_t stmpe811_ReadID_Debug(uint16_t *chip_id, uint8_t *i2c_status_msb, uint8_t *i2c_status_lsb) {
+    *chip_id = 0;
+    *i2c_status_msb = 0xFF;
+    *i2c_status_lsb = 0xFF;
+
+    if (g_i2c_bus == NULL) {
+        return I2C_STATUS_ERROR;
+    }
+
+    uint8_t id_msb = 0, id_lsb = 0;
+    i2c_status_t status_msb = IOE_Read_Status(TS_I2C_ADDRESS, STMPE811_REG_CHP_ID_MSB, &id_msb);
+    i2c_status_t status_lsb = IOE_Read_Status(TS_I2C_ADDRESS, STMPE811_REG_CHP_ID_LSB, &id_lsb);
+
+    *i2c_status_msb = (uint8_t)status_msb;
+    *i2c_status_lsb = (uint8_t)status_lsb;
+    *chip_id = (id_msb << 8) | id_lsb;
+
+    if (status_msb != I2C_STATUS_OK) return status_msb;
+    if (status_lsb != I2C_STATUS_OK) return status_lsb;
+    return I2C_STATUS_OK;
+}
+
+uint8_t stmpe811_ReadTscCtrl(void) {
+    if (g_i2c_bus == NULL) {
+        return 0xFF;
+    }
+    return IOE_Read(TS_I2C_ADDRESS, STMPE811_REG_TSC_CTRL);
+}
+
+uint8_t stmpe811_ReadFifoSize(void) {
+    if (g_i2c_bus == NULL) {
+        return 0xFF;
+    }
+    return IOE_Read(TS_I2C_ADDRESS, STMPE811_REG_FIFO_SIZE);
 }

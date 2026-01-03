@@ -36,8 +36,8 @@
 #define CROSSHAIR_SIZE      20
 #define CROSSHAIR_THICKNESS 2
 
-/* Touch timeout in ms */
-#define TOUCH_TIMEOUT_MS    30000
+/* Touch timeout in ms (60 seconds to give user plenty of time) */
+#define TOUCH_TIMEOUT_MS    60000
 
 /* Debounce delay in ms */
 #define TOUCH_DEBOUNCE_MS   100
@@ -181,6 +181,8 @@ static bool wait_for_touch(uint16_t *raw_x, uint16_t *raw_y, uint32_t timeout_ms
     uint32_t start = HAL_GetTick();
     uint32_t sum_x = 0, sum_y = 0;
     int samples = 0;
+    int attempts = 0;
+    const int max_attempts = 50;  /* Max attempts to read samples */
 
     /* Wait for touch to start */
     while (!touch_is_detected()) {
@@ -190,28 +192,42 @@ static bool wait_for_touch(uint16_t *raw_x, uint16_t *raw_y, uint32_t timeout_ms
         HAL_Delay(10);
     }
 
-    /* Debounce */
+    /* Debounce - wait a bit for touch to stabilize */
     HAL_Delay(TOUCH_DEBOUNCE_MS);
 
-    /* Collect samples while touched */
-    while (touch_is_detected() && samples < TOUCH_SAMPLES) {
+    /* Collect samples - keep trying even if touch_is_detected flickers */
+    while (samples < TOUCH_SAMPLES && attempts < max_attempts) {
+        /* Check overall timeout */
+        if ((HAL_GetTick() - start) > timeout_ms) {
+            break;
+        }
+
         uint16_t x, y;
         if (touch_read_raw(&x, &y)) {
-            sum_x += x;
-            sum_y += y;
-            samples++;
+            /* Valid sample - ignore outliers (values near 0 or 4095) */
+            if (x > 100 && x < 4000 && y > 100 && y < 4000) {
+                sum_x += x;
+                sum_y += y;
+                samples++;
+            }
         }
-        HAL_Delay(20);
+        attempts++;
+        HAL_Delay(30);  /* Longer delay between samples for stability */
     }
 
-    /* Wait for release */
+    /* Wait for release with timeout */
+    uint32_t release_start = HAL_GetTick();
     while (touch_is_detected()) {
+        if ((HAL_GetTick() - release_start) > 5000) {
+            break;  /* 5 second release timeout */
+        }
         HAL_Delay(10);
     }
 
     /* Debounce release */
     HAL_Delay(TOUCH_DEBOUNCE_MS);
 
+    /* Accept if we got at least 1 sample */
     if (samples > 0) {
         *raw_x = sum_x / samples;
         *raw_y = sum_y / samples;
@@ -297,19 +313,76 @@ void touch_calib_get_defaults(touch_calib_data_t *data) {
     data->version = TOUCH_CALIB_VERSION;
 
     /*
-     * Default calibration based on original stmpe811.c values:
-     * Y: y -= 360; yr = y / 11; yr = 320 - yr (inverted)
-     * X: x = 3870 - x (or 3800); xr = x / 15
+     * Safe default calibration for STM32F429I-DISC1 STMPE811 touch screen.
+     *
+     * These defaults map the full 12-bit ADC range (0-4095) to screen coordinates.
+     * This ensures the user can at least press buttons to run calibration.
+     *
+     * With x_invert=1, y_invert=1:
+     *   rx = 4095 - raw_x
+     *   ry = 4095 - raw_y
+     *   screen_x = (rx - x_offset) * x_scale / 65536
+     *   screen_y = (ry - y_offset) * y_scale / 65536
+     *
+     * Using offset=0 and scale to map full range:
+     *   x_scale = 240 * 65536 / 4095 = 3840
+     *   y_scale = 320 * 65536 / 4095 = 5120
+     *
+     * This gives a usable range even if raw values are 200-3800:
+     *   X: raw 200->3800 maps to screen 228->17 (covers most of screen)
+     *   Y: raw 200->3800 maps to screen 304->23 (covers most of screen)
      */
 
-    /* These are approximate values derived from the original constants */
-    data->x_offset = 150;   /* Raw X at screen X=0 after inversion */
-    data->x_scale = (TOUCH_CALIB_SCALE_FACTOR * TOUCH_CALIB_SCREEN_W) / 3600;
-    data->y_offset = 360;
-    data->y_scale = (TOUCH_CALIB_SCALE_FACTOR * TOUCH_CALIB_SCREEN_H) / 3520;
-    data->x_invert = 1;
-    data->y_invert = 1;
-    data->xy_swap = 0;
+    /* Wide-range defaults that ensure buttons are pressable */
+    data->x_offset = 0;     /* No offset - use full range */
+    data->x_scale = 3840;   /* 240 * 65536 / 4095 */
+    data->y_offset = 0;     /* No offset - use full range */
+    data->y_scale = 5120;   /* 320 * 65536 / 4095 */
+    data->x_invert = 1;     /* X axis is inverted */
+    data->y_invert = 1;     /* Y axis is inverted */
+    data->xy_swap = 0;      /* No axis swap */
+
+    /* Set default calibration points (estimated for full-range mapping)
+     * With x_invert=1, y_invert=1:
+     *   raw_x high -> screen_x low (left)
+     *   raw_y high -> screen_y low (top)
+     */
+    data->points[CALIB_POINT_TOP_LEFT].screen_x = TOUCH_CALIB_MARGIN;
+    data->points[CALIB_POINT_TOP_LEFT].screen_y = TOUCH_CALIB_MARGIN;
+    data->points[CALIB_POINT_TOP_LEFT].raw_x = 3800;  /* High raw = left */
+    data->points[CALIB_POINT_TOP_LEFT].raw_y = 3800;  /* High raw = top */
+
+    data->points[CALIB_POINT_TOP_RIGHT].screen_x = TOUCH_CALIB_SCREEN_W - TOUCH_CALIB_MARGIN;
+    data->points[CALIB_POINT_TOP_RIGHT].screen_y = TOUCH_CALIB_MARGIN;
+    data->points[CALIB_POINT_TOP_RIGHT].raw_x = 300;  /* Low raw = right */
+    data->points[CALIB_POINT_TOP_RIGHT].raw_y = 3800; /* High raw = top */
+
+    data->points[CALIB_POINT_BOTTOM_LEFT].screen_x = TOUCH_CALIB_MARGIN;
+    data->points[CALIB_POINT_BOTTOM_LEFT].screen_y = TOUCH_CALIB_SCREEN_H - TOUCH_CALIB_MARGIN;
+    data->points[CALIB_POINT_BOTTOM_LEFT].raw_x = 3800; /* High raw = left */
+    data->points[CALIB_POINT_BOTTOM_LEFT].raw_y = 300;  /* Low raw = bottom */
+
+    data->points[CALIB_POINT_BOTTOM_RIGHT].screen_x = TOUCH_CALIB_SCREEN_W - TOUCH_CALIB_MARGIN;
+    data->points[CALIB_POINT_BOTTOM_RIGHT].screen_y = TOUCH_CALIB_SCREEN_H - TOUCH_CALIB_MARGIN;
+    data->points[CALIB_POINT_BOTTOM_RIGHT].raw_x = 300; /* Low raw = right */
+    data->points[CALIB_POINT_BOTTOM_RIGHT].raw_y = 300; /* Low raw = bottom */
+
+    data->points[CALIB_POINT_CENTER].screen_x = TOUCH_CALIB_SCREEN_W / 2;
+    data->points[CALIB_POINT_CENTER].screen_y = TOUCH_CALIB_SCREEN_H / 2;
+    data->points[CALIB_POINT_CENTER].raw_x = 2048;  /* Middle */
+    data->points[CALIB_POINT_CENTER].raw_y = 2048;  /* Middle */
+}
+
+/*
+ * Write default calibration to flash
+ *
+ * This can be called during production to initialize calibration
+ * with safe defaults that ensure touch works.
+ */
+secbool touch_calib_write_defaults(void) {
+    touch_calib_data_t defaults;
+    touch_calib_get_defaults(&defaults);
+    return touch_calib_save(&defaults);
 }
 
 secbool touch_calib_load(touch_calib_data_t *data) {
@@ -483,6 +556,22 @@ secbool touch_calib_run(void) {
         { TOUCH_CALIB_SCREEN_W - TOUCH_CALIB_MARGIN, TOUCH_CALIB_SCREEN_H - TOUCH_CALIB_MARGIN },
         { TOUCH_CALIB_SCREEN_W / 2, TOUCH_CALIB_SCREEN_H / 2 },
     };
+
+    /* Wait for any existing touch to be released (from confirm button) */
+    display_bar(0, 0, DISPLAY_RESX, DISPLAY_RESY, COLOR_CALIB_BG);
+    display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY / 2 - 20, "Release touch", -1,
+                       FONT_NORMAL, COLOR_CALIB_TEXT, COLOR_CALIB_BG);
+    display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY / 2 + 10, "and wait...", -1,
+                       FONT_NORMAL, COLOR_CALIB_TEXT, COLOR_CALIB_BG);
+    display_refresh();
+
+    /* Wait for touch release */
+    while (touch_is_detected()) {
+        HAL_Delay(50);
+    }
+
+    /* Extra delay to ensure clean start */
+    HAL_Delay(500);
 
     /* Collect calibration points */
     for (int i = 0; i < TOUCH_CALIB_POINTS; i++) {

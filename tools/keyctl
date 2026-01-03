@@ -2,7 +2,13 @@
 import binascii
 import struct
 import click
-import pyblake2
+import hashlib
+# Use hashlib.blake2s instead of pyblake2
+class pyblake2_compat:
+    @staticmethod
+    def blake2s(data=b''):
+        return hashlib.blake2s(data)
+pyblake2 = pyblake2_compat
 from trezorlib import cosi
 
 indexmap = {"bootloader": 0, "vendorheader": 1, "firmware": 2}
