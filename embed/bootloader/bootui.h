@@ -48,6 +48,8 @@ void ui_screen_done(int restart_seconds, secbool full_redraw);
 
 void ui_screen_fail(void);
 
+void ui_screen_calib_confirm(void);
+
 void ui_fadein(void);
 void ui_fadeout(void);
 

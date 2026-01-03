@@ -29,6 +29,7 @@
 #include "rng.h"
 #include "secbool.h"
 #include "touch.h"
+#include "touch_calib.h"
 #include "usb.h"
 #include "version.h"
 
@@ -231,6 +232,9 @@ int main(void)
     touch_init();
     touch_power_on();
 
+    // Give touch controller time to stabilize
+    hal_delay(50);
+
     mpu_config_bootloader();
 
 #if PRODUCTION
@@ -241,15 +245,26 @@ main_start:
 
     display_clear();
 
-    // delay to detect touch
+    // Show prompt for touch calibration
+    display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY / 2 - 10,
+                       "Touch screen now", -1, FONT_NORMAL, COLOR_WHITE, COLOR_BLACK);
+    display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY / 2 + 15,
+                       "to calibrate...", -1, FONT_NORMAL, COLOR_WHITE, COLOR_BLACK);
+    display_refresh();
+    display_backlight(150);
+
+    // Extended delay to detect touch (1.5 seconds)
     uint32_t touched = 0;
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < 1500; i++) {
         touched = touch_is_detected() | touch_read();
         if (touched) {
             break;
         }
         hal_delay(1);
     }
+
+    // Clear the prompt
+    display_clear();
 
     vendor_header vhdr;
     image_header hdr;
@@ -312,9 +327,22 @@ main_start:
     } else
     // ... or if user touched the screen on start
     if (touched) {
-        // show firmware info with connect buttons
-
+        // First, offer touch calibration
         // no ui_fadeout(); - we already start from black screen
+        ui_screen_calib_confirm();
+        ui_fadein();
+
+        int calib_response = ui_user_input(INPUT_CONFIRM | INPUT_CANCEL);
+        ui_fadeout();
+
+        if (INPUT_CONFIRM == calib_response) {
+            // User wants to calibrate - run calibration
+            touch_calib_run();
+            // After calibration, restart to apply new calibration
+            goto main_start;
+        }
+
+        // show firmware info with connect buttons
         ui_screen_info(sectrue, &vhdr, &hdr);
         ui_fadein();
 

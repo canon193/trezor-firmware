@@ -32,7 +32,7 @@
 //                                           1
 #define FLASH_SECTOR_BOARDLOADER_END         2
 
-//                                           3
+#define FLASH_SECTOR_CALIB                   3  // Touch calibration data
 
 #define FLASH_SECTOR_STORAGE_1               4
 

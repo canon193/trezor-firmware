@@ -19,266 +19,305 @@
 
 /*
  * STMPE811 resistive touch controller driver for STM32F429I-DISC1.
- * Uses I2C3 (PA8=SCL, PC9=SDA) to communicate with the touch controller.
+ * Ported from Latest Trezor firmware with calibration for D001.
  */
 
 #include STM32_HAL_H
 
 #include "stmpe811.h"
+#include "i2c_bus.h"
+#include "touch_calib.h"
 
-// STMPE811 I2C address (7-bit, shifted for HAL)
-#define STMPE811_I2C_ADDR           (0x41 << 1)
-#define I2C_TIMEOUT                 1000
+/* Chip IDs */
+#define STMPE811_ID 0x0811
 
-// STMPE811 registers
-#define STMPE811_REG_CHIP_ID        0x00
-#define STMPE811_REG_SYS_CTRL1      0x03
-#define STMPE811_REG_SYS_CTRL2      0x04
-#define STMPE811_REG_INT_CTRL       0x09
-#define STMPE811_REG_INT_EN         0x0A
-#define STMPE811_REG_INT_STA        0x0B
-#define STMPE811_REG_IO_AF          0x17
-#define STMPE811_REG_ADC_CTRL1      0x20
-#define STMPE811_REG_ADC_CTRL2      0x21
-#define STMPE811_REG_TSC_CTRL       0x40
-#define STMPE811_REG_TSC_CFG        0x41
-#define STMPE811_REG_FIFO_TH        0x4A
-#define STMPE811_REG_FIFO_STA       0x4B
-#define STMPE811_REG_FIFO_SIZE      0x4C
-#define STMPE811_REG_TSC_DATA_XYZ   0x52
-#define STMPE811_REG_TSC_FRACT_XYZ  0x56
-#define STMPE811_REG_TSC_DATA_INC   0x57
+/* Identification registers & System Control */
+#define STMPE811_REG_CHP_ID_LSB 0x00
+#define STMPE811_REG_CHP_ID_MSB 0x01
+#define STMPE811_REG_ID_VER 0x02
+
+/* IO expander functionalities */
+#define STMPE811_ADC_FCT 0x01
+#define STMPE811_TS_FCT 0x02
+#define STMPE811_IO_FCT 0x04
+#define STMPE811_TEMPSENS_FCT 0x08
+
+/* General Control Registers */
+#define STMPE811_REG_SYS_CTRL1 0x03
+#define STMPE811_REG_SYS_CTRL2 0x04
+
+/* Interrupt system Registers */
+#define STMPE811_REG_INT_CTRL 0x09
+#define STMPE811_REG_INT_EN 0x0A
+#define STMPE811_REG_INT_STA 0x0B
+
+/* IO Registers */
+#define STMPE811_REG_IO_AF 0x17
+
+/* ADC Registers */
+#define STMPE811_REG_ADC_CTRL1 0x20
+#define STMPE811_REG_ADC_CTRL2 0x21
+
+/* Touch Screen Registers */
+#define STMPE811_REG_TSC_CTRL 0x40
+#define STMPE811_REG_TSC_CFG 0x41
+#define STMPE811_REG_FIFO_TH 0x4A
+#define STMPE811_REG_FIFO_STA 0x4B
+#define STMPE811_REG_FIFO_SIZE 0x4C
 #define STMPE811_REG_TSC_DATA_NON_INC 0xD7
-#define STMPE811_REG_TSC_I_DRIVE    0x58
+#define STMPE811_REG_TSC_FRACT_XYZ 0x56
+#define STMPE811_REG_TSC_I_DRIVE 0x58
 
-// STMPE811 bit definitions
-#define STMPE811_TS_CTRL_STATUS     0x80
-#define STMPE811_TS_CTRL_ENABLE     0x01
+/* Touch Screen Pins definition */
+#define STMPE811_PIN_4 0x10
+#define STMPE811_PIN_5 0x20
+#define STMPE811_PIN_6 0x40
+#define STMPE811_PIN_7 0x80
+#define STMPE811_TOUCH_IO_ALL (STMPE811_PIN_4 | STMPE811_PIN_5 | STMPE811_PIN_6 | STMPE811_PIN_7)
 
-// Touch IO pins (for alternate function)
-#define STMPE811_TOUCH_IO_ALL       0xF0  // Pins 4-7 used for touch
+/* TS registers masks */
+#define STMPE811_TS_CTRL_ENABLE 0x01
+#define STMPE811_TS_CTRL_STATUS 0x80
 
-static I2C_HandleTypeDef i2c_handle;
+/* I2C address */
+#define TS_I2C_ADDRESS 0x41
 
-static void i2c_gpio_init(void) {
-    GPIO_InitTypeDef gpio = {0};
+/* I2C timeout */
+#define I2C_TIMEOUT 0x3000
 
-    // Enable GPIO clocks
-    __HAL_RCC_GPIOA_CLK_ENABLE();
-    __HAL_RCC_GPIOC_CLK_ENABLE();
+static i2c_bus_t *g_i2c_bus = NULL;
 
-    /*
-     * I2C3 GPIO configuration on STM32F429I-DISC1:
-     * PA8 = I2C3_SCL (AF4)
-     * PC9 = I2C3_SDA (AF4)
-     */
+/* I2C write single byte */
+static void IOE_Write(uint8_t Addr, uint8_t Reg, uint8_t Value) {
+    i2c_op_t ops[] = {
+        {
+            .flags = I2C_FLAG_TX | I2C_FLAG_EMBED,
+            .size = 2,
+            .data = {Reg, Value},
+        },
+    };
 
-    // Configure PA8 for I2C3_SCL
-    gpio.Pin = GPIO_PIN_8;
-    gpio.Mode = GPIO_MODE_AF_OD;
-    gpio.Pull = GPIO_NOPULL;
-    gpio.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-    gpio.Alternate = GPIO_AF4_I2C3;
-    HAL_GPIO_Init(GPIOA, &gpio);
+    i2c_packet_t pkt = {
+        .address = TS_I2C_ADDRESS,
+        .timeout = I2C_TIMEOUT,
+        .op_count = ARRAY_LENGTH(ops),
+        .ops = ops,
+    };
 
-    // Configure PC9 for I2C3_SDA
-    gpio.Pin = GPIO_PIN_9;
-    HAL_GPIO_Init(GPIOC, &gpio);
+    i2c_bus_submit_and_wait(g_i2c_bus, &pkt);
 }
 
-static uint8_t stmpe811_read_reg(uint8_t reg) {
+/* I2C read single byte */
+static uint8_t IOE_Read(uint8_t Addr, uint8_t Reg) {
     uint8_t value = 0;
-    HAL_I2C_Mem_Read(&i2c_handle, STMPE811_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
-                     &value, 1, I2C_TIMEOUT);
+
+    i2c_op_t ops[] = {
+        {
+            .flags = I2C_FLAG_TX | I2C_FLAG_EMBED,
+            .size = 1,
+            .data = {Reg},
+        },
+        {
+            .flags = I2C_FLAG_RX,
+            .size = 1,
+            .ptr = &value,
+        },
+    };
+
+    i2c_packet_t pkt = {
+        .address = TS_I2C_ADDRESS,
+        .timeout = I2C_TIMEOUT,
+        .op_count = ARRAY_LENGTH(ops),
+        .ops = ops,
+    };
+
+    i2c_bus_submit_and_wait(g_i2c_bus, &pkt);
+
     return value;
 }
 
-static void stmpe811_write_reg(uint8_t reg, uint8_t value) {
-    HAL_I2C_Mem_Write(&i2c_handle, STMPE811_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
-                      &value, 1, I2C_TIMEOUT);
+/* I2C read multiple bytes */
+static uint16_t IOE_ReadMultiple(uint8_t Addr, uint8_t Reg, uint8_t *pBuffer, uint16_t Length) {
+    i2c_op_t ops[] = {
+        {
+            .flags = I2C_FLAG_TX | I2C_FLAG_EMBED,
+            .size = 1,
+            .data = {Reg},
+        },
+        {
+            .flags = I2C_FLAG_RX,
+            .size = Length,
+            .ptr = pBuffer,
+        },
+    };
+
+    i2c_packet_t pkt = {
+        .address = TS_I2C_ADDRESS,
+        .timeout = I2C_TIMEOUT,
+        .op_count = ARRAY_LENGTH(ops),
+        .ops = ops,
+    };
+
+    i2c_status_t status = i2c_bus_submit_and_wait(g_i2c_bus, &pkt);
+
+    return status == I2C_STATUS_OK ? 0 : 1;
 }
 
-static void stmpe811_read_multiple(uint8_t reg, uint8_t *data, uint16_t len) {
-    HAL_I2C_Mem_Read(&i2c_handle, STMPE811_I2C_ADDR, reg, I2C_MEMADD_SIZE_8BIT,
-                     data, len, I2C_TIMEOUT);
+/* Delay function */
+static void IOE_Delay(uint32_t Delay) {
+    HAL_Delay(Delay);
 }
 
-void stmpe811_init(void) {
-    // Initialize I2C GPIO
-    i2c_gpio_init();
-
-    // Enable I2C3 clock
-    __HAL_RCC_I2C3_CLK_ENABLE();
-
-    // Configure I2C3
-    i2c_handle.Instance = I2C3;
-    i2c_handle.Init.ClockSpeed = 400000;  // 400 kHz
-    i2c_handle.Init.DutyCycle = I2C_DUTYCYCLE_2;
-    i2c_handle.Init.OwnAddress1 = 0;
-    i2c_handle.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-    i2c_handle.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-    i2c_handle.Init.OwnAddress2 = 0;
-    i2c_handle.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-    i2c_handle.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-
-    HAL_I2C_Init(&i2c_handle);
-
-    // Software reset the STMPE811
-    stmpe811_write_reg(STMPE811_REG_SYS_CTRL1, 0x02);  // Soft reset
-    HAL_Delay(10);
-    stmpe811_write_reg(STMPE811_REG_SYS_CTRL1, 0x00);  // Exit reset
-    HAL_Delay(2);
-
-    // Disable IO function to allow TS function
-    uint8_t mode = stmpe811_read_reg(STMPE811_REG_SYS_CTRL2);
-    mode &= ~0x04;  // Clear IO_FCT bit
-    stmpe811_write_reg(STMPE811_REG_SYS_CTRL2, mode);
-
-    // Enable touch screen pins alternate function
-    uint8_t af = stmpe811_read_reg(STMPE811_REG_IO_AF);
-    af &= ~STMPE811_TOUCH_IO_ALL;  // Enable AF for touch pins
-    stmpe811_write_reg(STMPE811_REG_IO_AF, af);
-
-    // Enable TS and ADC functions
-    mode &= ~0x03;  // Clear TS_FCT and ADC_FCT bits
-    stmpe811_write_reg(STMPE811_REG_SYS_CTRL2, mode);
-
-    // Configure ADC
-    stmpe811_write_reg(STMPE811_REG_ADC_CTRL1, 0x49);  // Sample time, 12-bit, internal ref
-    HAL_Delay(2);
-    stmpe811_write_reg(STMPE811_REG_ADC_CTRL2, 0x01);  // ADC clock 3.25 MHz
-
-    // Configure touch screen
-    // 4 samples averaging, 500us touch delay, 500us panel delay
-    stmpe811_write_reg(STMPE811_REG_TSC_CFG, 0x9A);
-
-    // FIFO threshold = 1 (single point)
-    stmpe811_write_reg(STMPE811_REG_FIFO_TH, 0x01);
-
-    // Clear FIFO
-    stmpe811_write_reg(STMPE811_REG_FIFO_STA, 0x01);
-    stmpe811_write_reg(STMPE811_REG_FIFO_STA, 0x00);
-
-    // Fractional part for XYZ
-    stmpe811_write_reg(STMPE811_REG_TSC_FRACT_XYZ, 0x01);
-
-    // Drive limit 50mA
-    stmpe811_write_reg(STMPE811_REG_TSC_I_DRIVE, 0x01);
-
-    // Enable TSC (XYZ mode, no window tracking)
-    stmpe811_write_reg(STMPE811_REG_TSC_CTRL, 0x01);
-
-    // Clear interrupt status
-    stmpe811_write_reg(STMPE811_REG_INT_STA, 0xFF);
-
-    HAL_Delay(2);
+/* Enable alternate function for touch pins */
+static void stmpe811_IO_EnableAF(uint16_t DeviceAddr, uint32_t IO_Pin) {
+    uint8_t tmp = IOE_Read(DeviceAddr, STMPE811_REG_IO_AF);
+    tmp &= ~(uint8_t)IO_Pin;
+    IOE_Write(DeviceAddr, STMPE811_REG_IO_AF, tmp);
 }
 
-bool stmpe811_is_touched(void) {
-    uint8_t ctrl = stmpe811_read_reg(STMPE811_REG_TSC_CTRL);
-    if (ctrl & STMPE811_TS_CTRL_STATUS) {
-        uint8_t fifo_size = stmpe811_read_reg(STMPE811_REG_FIFO_SIZE);
-        return fifo_size > 0;
+void touch_set_mode(void) {
+    uint8_t mode;
+
+    /* Get current SYS_CTRL2 and disable IO functionality */
+    mode = IOE_Read(TS_I2C_ADDRESS, STMPE811_REG_SYS_CTRL2);
+    mode &= ~(STMPE811_IO_FCT);
+    IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_SYS_CTRL2, mode);
+
+    /* Select TSC pins in TSC alternate mode */
+    stmpe811_IO_EnableAF(TS_I2C_ADDRESS, STMPE811_TOUCH_IO_ALL);
+
+    /* Enable TS and ADC functions */
+    mode &= ~(STMPE811_TS_FCT | STMPE811_ADC_FCT);
+    IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_SYS_CTRL2, mode);
+
+    /* Configure ADC: Sample Time, 12-bit, internal ref */
+    IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_ADC_CTRL1, 0x49);
+    IOE_Delay(2);
+
+    /* ADC clock speed: 3.25 MHz */
+    IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_ADC_CTRL2, 0x01);
+
+    /* Touch screen config:
+       - 4 samples averaging
+       - 500us touch delay
+       - 500us panel driver setting time
+    */
+    IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_TSC_CFG, 0x9A);
+
+    /* FIFO threshold: single point */
+    IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_FIFO_TH, 0x01);
+
+    /* Clear FIFO */
+    IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_FIFO_STA, 0x01);
+    IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_FIFO_STA, 0x00);
+
+    /* Pressure measurement: Fractional=7, Whole=1 */
+    IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_TSC_FRACT_XYZ, 0x01);
+
+    /* Driving capability: 50mA */
+    IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_TSC_I_DRIVE, 0x01);
+
+    /* Enable TSC in XYZ acquisition mode */
+    IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_TSC_CTRL, 0x01);
+
+    /* Clear all status bits */
+    IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_INT_STA, 0xFF);
+
+    IOE_Delay(2);
+}
+
+void stmpe811_Reset(i2c_bus_t *i2c_bus) {
+    g_i2c_bus = i2c_bus;
+
+    /* Power Down the STMPE811 */
+    IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_SYS_CTRL1, 2);
+
+    /* Wait for registers to reset */
+    IOE_Delay(10);
+
+    /* Power On - reinitializes all registers */
+    IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_SYS_CTRL1, 0);
+
+    IOE_Delay(2);
+}
+
+uint32_t touch_active(void) {
+    uint8_t state;
+    uint8_t ret = 0;
+
+    state = ((IOE_Read(TS_I2C_ADDRESS, STMPE811_REG_TSC_CTRL) &
+              (uint8_t)STMPE811_TS_CTRL_STATUS) == (uint8_t)0x80);
+
+    if (state > 0) {
+        if (IOE_Read(TS_I2C_ADDRESS, STMPE811_REG_FIFO_SIZE) > 0) {
+            ret = 1;
+        }
+    } else {
+        /* Reset FIFO when touch ends */
+        IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_FIFO_STA, 0x01);
+        IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_FIFO_STA, 0x00);
     }
-    // Reset FIFO when not touched
-    stmpe811_write_reg(STMPE811_REG_FIFO_STA, 0x01);
-    stmpe811_write_reg(STMPE811_REG_FIFO_STA, 0x00);
-    return false;
+
+    return ret;
 }
 
-void stmpe811_get_state(stmpe811_state_t *state) {
-    static uint16_t last_x = 0, last_y = 0;
-    static bool last_detected = false;
+void stmpe811_TS_GetXY(uint16_t *X, uint16_t *Y) {
+    uint8_t dataXYZ[4];
+    uint32_t uldataXYZ;
 
-    state->TouchDetected = last_detected;
-    state->X = last_x;
-    state->Y = last_y;
+    IOE_ReadMultiple(TS_I2C_ADDRESS, STMPE811_REG_TSC_DATA_NON_INC, dataXYZ,
+                     sizeof(dataXYZ));
 
-    uint8_t ctrl = stmpe811_read_reg(STMPE811_REG_TSC_CTRL);
-    bool detected = (ctrl & STMPE811_TS_CTRL_STATUS) != 0;
+    /* Calculate positions values */
+    uldataXYZ = (dataXYZ[0] << 24) | (dataXYZ[1] << 16) | (dataXYZ[2] << 8) |
+                (dataXYZ[3] << 0);
+    *X = (uldataXYZ >> 20) & 0x00000FFF;
+    *Y = (uldataXYZ >> 8) & 0x00000FFF;
+
+    /* Reset FIFO */
+    IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_FIFO_STA, 0x01);
+    IOE_Write(TS_I2C_ADDRESS, STMPE811_REG_FIFO_STA, 0x00);
+}
+
+void BSP_TS_GetState(TS_StateTypeDef *TsState) {
+    static bool _detected = false;
+    static uint32_t _x = 0, _y = 0;
+    uint16_t xDiff, yDiff, raw_x, raw_y;
+    uint16_t screen_x, screen_y;
+
+    TsState->TouchDetected = _detected;
+    TsState->X = _x;
+    TsState->Y = _y;
+
+    bool detected = (IOE_Read(TS_I2C_ADDRESS, STMPE811_REG_TSC_CTRL) &
+                     STMPE811_TS_CTRL_STATUS) != 0;
 
     if (!detected) {
-        state->TouchDetected = last_detected = false;
+        TsState->TouchDetected = _detected = false;
         return;
     }
 
-    uint8_t fifo_size = stmpe811_read_reg(STMPE811_REG_FIFO_SIZE);
-    if (fifo_size > 0) {
-        uint8_t data[4];
-        stmpe811_read_multiple(STMPE811_REG_TSC_DATA_NON_INC, data, 4);
+    if (IOE_Read(TS_I2C_ADDRESS, STMPE811_REG_FIFO_SIZE) > 0) {
+        /* Get raw touch coordinates */
+        stmpe811_TS_GetXY(&raw_x, &raw_y);
 
-        // Extract X and Y from packed data
-        uint32_t raw = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
-        uint16_t raw_x = (raw >> 20) & 0xFFF;
-        uint16_t raw_y = (raw >> 8) & 0xFFF;
+        /* Apply calibration to convert raw to screen coordinates */
+        touch_calib_apply(raw_x, raw_y, &screen_x, &screen_y);
 
-        // Calibration for STM32F429I-DISC1 touchscreen
-        // Based on measured corner values:
-        // Top-left: raw_x=3511, raw_y=498
-        // Top-right: raw_x=646, raw_y=1090
-        // Bottom-left: raw_x=3306, raw_y=3544
-        // Bottom-right: raw_x=646, raw_y=3643
-        //
-        // X range: 646 (right) to 3500 (left) - inverted
-        // Y range: 500 (top) to 3600 (bottom)
+        /* Debounce: only update if movement > 5 pixels */
+        xDiff = screen_x > _x ? (screen_x - _x) : (_x - screen_x);
+        yDiff = screen_y > _y ? (screen_y - _y) : (_y - screen_y);
 
-        // X calibration: raw_x decreases from left to right
-        int16_t x = (3500 - (int16_t)raw_x) * 240 / 2850;
-        if (x < 0) {
-            x = 0;
-        } else if (x >= 240) {
-            x = 239;
-        }
-
-        // Y calibration: raw_y increases from top to bottom
-        int16_t y = ((int16_t)raw_y - 500) * 320 / 3100;
-        if (y < 0) {
-            y = 0;
-        } else if (y >= 320) {
-            y = 319;
-        }
-
-        // Apply threshold filter
-        uint16_t xDiff = (x > last_x) ? (x - last_x) : (last_x - x);
-        uint16_t yDiff = (y > last_y) ? (y - last_y) : (last_y - y);
         if (xDiff + yDiff > 5) {
-            last_x = x;
-            last_y = y;
+            _x = screen_x;
+            _y = screen_y;
         }
 
-        last_detected = true;
-        state->X = last_x;
-        state->Y = last_y;
+        _detected = true;
 
-        // Clear FIFO
-        stmpe811_write_reg(STMPE811_REG_FIFO_STA, 0x01);
-        stmpe811_write_reg(STMPE811_REG_FIFO_STA, 0x00);
+        TsState->X = _x;
+        TsState->Y = _y;
     }
 
-    state->TouchDetected = last_detected;
-}
-
-bool stmpe811_get_raw(uint16_t *raw_x, uint16_t *raw_y) {
-    uint8_t ctrl = stmpe811_read_reg(STMPE811_REG_TSC_CTRL);
-    if (!(ctrl & STMPE811_TS_CTRL_STATUS)) {
-        return false;
-    }
-
-    uint8_t fifo_size = stmpe811_read_reg(STMPE811_REG_FIFO_SIZE);
-    if (fifo_size == 0) {
-        return false;
-    }
-
-    uint8_t data[4];
-    stmpe811_read_multiple(STMPE811_REG_TSC_DATA_NON_INC, data, 4);
-
-    uint32_t raw = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
-    *raw_x = (raw >> 20) & 0xFFF;
-    *raw_y = (raw >> 8) & 0xFFF;
-
-    // Clear FIFO
-    stmpe811_write_reg(STMPE811_REG_FIFO_STA, 0x01);
-    stmpe811_write_reg(STMPE811_REG_FIFO_STA, 0x00);
-
-    return true;
+    TsState->TouchDetected = _detected;
 }

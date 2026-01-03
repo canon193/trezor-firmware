@@ -23,23 +23,29 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "i2c_bus.h"
+
 // Touch state structure
 typedef struct {
-    bool TouchDetected;
+    uint16_t TouchDetected;
     uint16_t X;
     uint16_t Y;
-} stmpe811_state_t;
-
-// Initialize STMPE811 touch controller
-void stmpe811_init(void);
-
-// Check if touch is active
-bool stmpe811_is_touched(void);
+    uint16_t Z;
+} TS_StateTypeDef;
 
 // Get touch state (position and detection status)
-void stmpe811_get_state(stmpe811_state_t *state);
+void BSP_TS_GetState(TS_StateTypeDef *TsState);
+
+// Reset and initialize STMPE811
+void stmpe811_Reset(i2c_bus_t *i2c_bus);
+
+// Configure touch screen mode
+void touch_set_mode(void);
+
+// Check if touch is active (returns 1 if touched)
+uint32_t touch_active(void);
 
 // Get raw touch values (for calibration)
-bool stmpe811_get_raw(uint16_t *raw_x, uint16_t *raw_y);
+void stmpe811_TS_GetXY(uint16_t *X, uint16_t *Y);
 
 #endif // __STMPE811_H__

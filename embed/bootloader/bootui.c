@@ -283,6 +283,20 @@ void ui_screen_fail(void)
     display_text_center(DISPLAY_RESX / 2, DISPLAY_RESY - 24, "Failed! Please, reconnect.", -1, FONT_NORMAL, COLOR_BLACK, COLOR_WHITE);
 }
 
+// calibration UI
+
+void ui_screen_calib_confirm(void)
+{
+    display_bar(0, 0, DISPLAY_RESX, DISPLAY_RESY, COLOR_WHITE);
+    display_text(16, 32, "Touch Calibration", -1, FONT_NORMAL, COLOR_BLACK, COLOR_WHITE);
+    display_bar(16, 44, DISPLAY_RESX - 14 * 2, 1, COLOR_BLACK);
+    display_icon(16, 54, 32, 32, toi_icon_info + 12, sizeof(toi_icon_info) - 12, COLOR_BL_PROCESS, COLOR_WHITE);
+    display_text(55, 70, "Screen touched", -1, FONT_NORMAL, COLOR_BLACK, COLOR_WHITE);
+    display_text(55, 95, "at startup.", -1, FONT_NORMAL, COLOR_BLACK, COLOR_WHITE);
+    display_text_center(120, 145, "Calibrate touch?", -1, FONT_NORMAL, COLOR_BLACK, COLOR_WHITE);
+    ui_confirm_cancel_buttons();
+}
+
 // general functions
 
 void ui_fadein(void)
